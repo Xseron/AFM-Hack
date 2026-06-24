@@ -1,0 +1,9 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\e8e80ee4d3094c16ba336b23bb2beafe\DXY3u1ojZvi.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Движую идею того чувака, который решил продвинуть
+это тренчуть дальше, где люди скидывают друг другу
+деньги по стопу, 200 рублей на карту, тем самым коллективно
+закрывают и потеки и кредиты, поэтому пиши

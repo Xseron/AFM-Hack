@@ -139,6 +139,13 @@ PAGE = """
       vertical-align: top;
     }
     th { color: var(--muted); font-size: 12px; text-transform: uppercase; }
+    .description-cell {
+      max-width: 360px;
+      min-width: 220px;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      line-height: 1.35;
+    }
     pre {
       margin: 0;
       padding: 12px;
@@ -213,6 +220,12 @@ PAGE = """
         <div class="metric"><span>Risk</span><strong id="riskScore">-</strong></div>
         <div class="metric"><span>Category</span><strong id="category">-</strong></div>
       </div>
+      <div class="summary">
+        <div class="metric"><span>Platform</span><strong id="sourcePlatform">-</strong></div>
+        <div class="metric"><span>Reel</span><strong id="sourceShortcode">-</strong></div>
+        <div class="metric"><span>Source URL</span><strong id="sourceUrl">-</strong></div>
+        <div class="metric"><span>Description</span><strong id="sourceDescription">-</strong></div>
+      </div>
       <div class="confidence-grid">
         <div class="metric"><span>Semantic</span><strong id="semanticConfidence">-</strong></div>
         <div class="metric"><span>OCR</span><strong id="ocrConfidence">-</strong></div>
@@ -228,8 +241,16 @@ PAGE = """
     <section>
       <h2>Priority List</h2>
       <table>
-        <thead><tr><th>Job</th><th>Status</th><th>Priority</th><th>Risk</th><th>Semantic</th><th>OCR</th><th>CLIP</th><th>Audio</th></tr></thead>
-        <tbody id="priorityList"><tr><td colspan="8">No priority data loaded.</td></tr></tbody>
+        <thead><tr><th>Reel</th><th>Description</th><th>Status</th><th>Priority</th><th>Risk</th><th>Category</th><th>Semantic</th><th>OCR</th><th>CLIP</th><th>Audio</th><th>Job</th></tr></thead>
+        <tbody id="priorityList"><tr><td colspan="11">No priority data loaded.</td></tr></tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Recent Reels</h2>
+      <table>
+        <thead><tr><th>Time</th><th>Reel</th><th>Description</th><th>Status</th><th>Semantic</th><th>OCR</th><th>CLIP</th><th>Audio</th><th>Risk</th><th>Category</th><th>Job</th></tr></thead>
+        <tbody id="recentJobs"><tr><td colspan="11">No recent jobs loaded.</td></tr></tbody>
       </table>
     </section>
 
@@ -261,6 +282,7 @@ PAGE = """
       $("category").textContent = job.category || "-";
       $("category").className = job.category && job.category !== "clean" ? "risk" : "clean";
       setConfidenceMetrics(job.method_confidences || {});
+      setSource(job.source || {}, job.description || "");
 
       const rows = (job.findings || []).map((f) => `
         <tr>
@@ -271,6 +293,17 @@ PAGE = """
         </tr>
       `);
       $("findings").innerHTML = rows.length ? rows.join("") : "<tr><td colspan='4'>No findings.</td></tr>";
+    }
+
+    function setSource(source, description) {
+      $("sourcePlatform").textContent = source.platform || "-";
+      $("sourceShortcode").textContent = source.shortcode || "-";
+      $("sourceDescription").textContent = description ? description.slice(0, 80) : "-";
+      if (source.url) {
+        $("sourceUrl").innerHTML = `<a href="${escapeHtml(source.url)}" target="_blank" rel="noreferrer">open</a>`;
+      } else {
+        $("sourceUrl").textContent = "-";
+      }
     }
 
     function formatConfidence(value) {
@@ -305,6 +338,7 @@ PAGE = """
         pollTimer = null;
         await loadExplanations(job.job_id);
         await loadPriorityList();
+        await loadRecentJobs();
         setStatus(job.status === "done" ? "Analysis complete." : "Analysis failed.", job.status === "failed");
       } else if (poll) {
         setStatus(`Job ${job.status}; waiting for analysis...`);
@@ -355,6 +389,7 @@ PAGE = """
         setStatus("Loading result...");
         await loadJob(jobId);
         await loadPriorityList();
+        await loadRecentJobs();
         setStatus("Result loaded.");
       } catch (err) {
         setStatus(err.message || String(err), true);
@@ -371,6 +406,7 @@ PAGE = """
         const data = await res.json();
         setStatus(`Dedup cleared for ${data.cleared} job(s).`);
         await loadPriorityList();
+        await loadRecentJobs();
       } catch (err) {
         setStatus(err.message || String(err), true);
       } finally {
@@ -401,24 +437,76 @@ PAGE = """
       const data = await res.json();
       const rows = (data.items || []).map((item) => {
         const c = item.method_confidences || {};
+        const source = item.source || {};
+        const reel = reelLink(source);
         return `
           <tr>
-            <td>${escapeHtml(item.job_id || "")}</td>
+            <td>${reel}</td>
+            <td class="description-cell">${escapeHtml(item.description || "-")}</td>
             <td>${escapeHtml(item.status || "")}</td>
             <td>${formatConfidence(item.priority)}</td>
             <td>${formatConfidence(item.risk_score)}</td>
+            <td>${escapeHtml(item.category || "-")}</td>
             <td>${formatConfidence(c.semantic)}</td>
             <td>${formatConfidence(c.ocr)}</td>
             <td>${formatConfidence(c.clip)}</td>
             <td>${formatConfidence(c.audio)}</td>
+            <td>${escapeHtml(item.job_id || "")}</td>
           </tr>
         `;
       });
-      $("priorityList").innerHTML = rows.length ? rows.join("") : "<tr><td colspan='8'>No jobs yet.</td></tr>";
+      $("priorityList").innerHTML = rows.length ? rows.join("") : "<tr><td colspan='11'>No jobs yet.</td></tr>";
+    }
+
+    function reelLink(source) {
+      if (!source) return "-";
+      const url = source.top_bar_url || source.url || source.permalink;
+      const label = source.shortcode || source.platform || "open";
+      return url
+        ? `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(label)}</a>`
+        : escapeHtml(label || "-");
+    }
+
+    function formatTime(value) {
+      if (!value) return "-";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return escapeHtml(value);
+      return date.toLocaleString();
+    }
+
+    async function loadRecentJobs() {
+      const res = await fetch("/recent-jobs");
+      if (!res.ok) return;
+      const data = await res.json();
+      const rows = (data.items || []).map((item) => {
+        const c = item.method_confidences || {};
+        return `
+          <tr>
+            <td>${formatTime(item.created_at)}</td>
+            <td>${reelLink(item.source || {})}</td>
+            <td class="description-cell">${escapeHtml(item.description || "-")}</td>
+            <td>${escapeHtml(item.status || "")}</td>
+            <td>${formatConfidence(c.semantic)}</td>
+            <td>${formatConfidence(c.ocr)}</td>
+            <td>${formatConfidence(c.clip)}</td>
+            <td>${formatConfidence(c.audio)}</td>
+            <td>${formatConfidence(item.risk_score)}</td>
+            <td>${escapeHtml(item.category || "-")}</td>
+            <td>${escapeHtml(item.job_id || "")}</td>
+          </tr>
+        `;
+      });
+      $("recentJobs").innerHTML = rows.length ? rows.join("") : "<tr><td colspan='11'>No jobs yet.</td></tr>";
     }
 
     loadModels().catch(() => {});
     loadPriorityList().catch(() => {});
+    loadRecentJobs().catch(() => {});
+    setInterval(() => {
+      loadPriorityList().catch(() => {});
+      loadRecentJobs().catch(() => {});
+      loadModels().catch(() => {});
+    }, 3000);
   </script>
 </body>
 </html>

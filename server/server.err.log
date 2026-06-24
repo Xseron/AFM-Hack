@@ -1,7 +1,5 @@
-CUDA requested, but PyTorch is CPU-only or cannot see CUDA; using CPU for torch models
-CUDA requested for Whisper, but cudnn_ops64_9.dll is not on PATH; using CPU
 Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. `use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`.
-INFO:     Started server process [42796]
+INFO:     Started server process [53100]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)

@@ -1,0 +1,6 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\0be21bc1557549bd8b5758e84388fccc\DZF7c0ovW2_.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Которым закроем крититы. Нет, это не розыпиваешь.

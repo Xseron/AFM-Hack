@@ -1,0 +1,4 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\983108f008b34793a14837b3fa2c3f4e\DZYYvD7Nrsy.webm
+# frames_ocrd: 1
+
+me&you

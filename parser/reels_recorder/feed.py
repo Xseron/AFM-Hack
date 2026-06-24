@@ -11,6 +11,25 @@ from .cli import Config
 # Feed URLs are /reels/<code>/ (plural); permalinks are /reel/<code>/ (singular).
 _SHORTCODE_RE = re.compile(r"/reels?/([A-Za-z0-9_-]+)")
 
+# The reels feed stacks every reel in the DOM with no <article> wrapper, so we
+# scope to the *active* reel only: take the most-visible <video>, then climb to
+# the nearest ancestor that still contains a single video (the per-reel block).
+_ACTIVE_REEL_JS = r"""
+  const visArea = (el) => { const r = el.getBoundingClientRect();
+    const w = Math.min(r.right, innerWidth) - Math.max(r.left, 0);
+    const h = Math.min(r.bottom, innerHeight) - Math.max(r.top, 0);
+    return Math.max(0, w) * Math.max(0, h); };
+  const vids = Array.from(document.querySelectorAll('video'));
+  if (!vids.length) return null;
+  const v = vids.slice().sort((a, b) => visArea(b) - visArea(a))[0];
+  let el = v, container = v;
+  while (el && el.parentElement) {
+    el = el.parentElement;
+    if (el.querySelectorAll('video').length > 1) break;
+    container = el;
+  }
+"""
+
 
 def shortcode(page: Page) -> str | None:
     """Dedup key for the active reel. URL is most reliable; DOM link is the fallback."""
@@ -29,33 +48,78 @@ def shortcode(page: Page) -> str | None:
 
 
 def caption(page: Page, code: str | None) -> str:
-    """Best-effort caption text for the upload description (server needs it non-empty)."""
-    js = """
-    () => {
-      const vids = Array.from(document.querySelectorAll('video'));
-      if (!vids.length) return '';
-      const visArea = (el) => { const r = el.getBoundingClientRect();
-        const w = Math.max(0, Math.min(r.right, innerWidth) - Math.max(r.left, 0));
-        const h = Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0));
-        return w * h; };
-      const v = vids.slice().sort((a, b) => visArea(b) - visArea(a))[0];
-      let node = v.closest('article') || v.closest('div[role="dialog"]') || document.body;
-      const spans = Array.from(node.querySelectorAll('h1, span, span[dir]'));
-      let best = '';
-      for (const s of spans) {
-        const t = (s.innerText || '').trim();
-        if (t.length > best.length && t.length < 2200) best = t;
-      }
-      return best;
-    }
+    """Best-effort caption text for the upload description (server needs it non-empty).
+
+    Scoped to the *active* reel (see _ACTIVE_REEL_JS). Within that reel we take the
+    longest "leaf" text span, skipping the things that are not the caption: the
+    author username, the audio attribution ("artist · track"), view/like counts,
+    and UI words ("ещё", "Подробнее", "Реклама", …). This avoids the old bug where
+    the longest text on the page won — which on sponsored reels was an ad
+    disclaimer and on others a location tag or the whole-reel wrapper text.
     """
+    expand_caption(page)
     try:
-        text = (page.evaluate(js) or "").strip()
+        text = (page.evaluate(_CAPTION_JS) or "").strip()
     except Exception:  # noqa: BLE001
         text = ""
     if text:
         return text[:2000]
     return f"Instagram Reel {code}" if code else "Instagram Reel"
+
+
+_CAPTION_JS = r"""
+() => {
+  const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
+  const NOISE = /^(…\s*)?(more|ещё|еще|меньше|less|подробнее|реклама|sponsored|follow|подписаться|original audio|оригинальный звук|verified|подтверждённый)$/i;
+""" + _ACTIVE_REEL_JS + r"""
+  const usable = (t) => {
+    if (!t || t.length < 2) return false;
+    if (NOISE.test(t)) return false;
+    if (/^[\d\s.,]+$/.test(t)) return false;   // view / like counts
+    if (/\s·\s/.test(t)) return false;          // audio attribution "artist · track"
+    return true;
+  };
+  // The caption span owns its text directly; hashtag/mention <a> children are
+  // short, so a child carrying a big chunk of text means this is a wrapper.
+  let best = '';
+  for (const s of container.querySelectorAll('span, h1')) {
+    let childMax = 0;
+    for (const c of s.children) { const ct = clean(c.innerText); if (ct.length > childMax) childMax = ct.length; }
+    if (childMax > 40) continue;
+    const t = clean(s.innerText);
+    if (usable(t) && t.length > best.length) best = t;
+  }
+  // Strip a trailing inline expander that stuck to the text ("… ещё" / "меньше").
+  best = best.replace(/\s*…\s*(ещё|еще|more)\s*$/i, '').replace(/\s*(ещё|еще|меньше)\s*$/i, '').trim();
+  return best.slice(0, 2000);
+}
+"""
+
+
+# Clicks the active reel's inline caption expander ("… ещё" / "more"). It is a
+# plain pointer span, not a link — we skip anchors so we never trigger a
+# sponsored reel's "Подробнее" CTA (which navigates away).
+_EXPAND_JS = r"""
+() => {
+""" + _ACTIVE_REEL_JS + r"""
+  for (const e of container.querySelectorAll('span, div[role="button"], button')) {
+    const t = (e.innerText || '').replace(/\s+/g, ' ').trim();
+    if (/^(…\s*)?(ещё|еще|more)$/i.test(t) && !e.closest('a')) {
+      try { e.click(); return true; } catch (_) {}
+    }
+  }
+  return false;
+}
+"""
+
+
+def expand_caption(page: Page) -> None:
+    """Click the active reel's inline "more/ещё" caption expander if present."""
+    try:
+        if page.evaluate(_EXPAND_JS):
+            page.wait_for_timeout(300)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _first_visible(page: Page, selectors: list[str]) -> Locator | None:

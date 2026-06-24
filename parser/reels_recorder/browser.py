@@ -53,6 +53,39 @@ def ensure_reels_feed(page: Page, cfg: Config) -> None:
     page.wait_for_timeout(1500)
 
 
+def login_if_needed(page: Page, cfg: Config) -> bool:
+    if not is_logged_out(page):
+        return True
+    if not cfg.auto_login:
+        return False
+    if not cfg.instagram_username or not cfg.instagram_password:
+        print("[error] Instagram login required, but credentials are missing in .env")
+        return False
+
+    page.goto("https://www.instagram.com/accounts/login/", wait_until="domcontentloaded")
+    page.wait_for_timeout(1500)
+    try:
+        page.locator('input[name="username"]').fill(cfg.instagram_username, timeout=10000)
+        page.locator('input[name="password"]').fill(cfg.instagram_password, timeout=10000)
+        try:
+            page.get_by_role("button", name="Log in").click(timeout=5000)
+        except Exception:  # noqa: BLE001
+            page.locator('button[type="submit"]').click(timeout=5000)
+    except Exception as e:  # noqa: BLE001
+        print(f"[error] could not submit Instagram login form: {e}")
+        return False
+
+    for _ in range(60):
+        page.wait_for_timeout(1000)
+        if not is_logged_out(page):
+            page.goto(REELS_URL, wait_until="domcontentloaded")
+            page.wait_for_timeout(1500)
+            return not is_logged_out(page)
+
+    print("[error] Instagram still shows login/checkpoint. Complete verification in Chrome, then rerun the bot.")
+    return False
+
+
 def is_logged_out(page: Page) -> bool:
     for sel in LOGIN_MARKERS:
         try:

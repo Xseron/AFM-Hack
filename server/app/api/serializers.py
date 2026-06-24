@@ -23,9 +23,12 @@ def method_confidences(findings) -> dict[str, float]:
 
 def source_info(job) -> dict:
     meta = job.source_meta or {}
+    top_bar_url = meta.get("top_bar_url") or meta.get("page_url") or job.source_url
     return {
         "platform": job.source_platform,
         "url": job.source_url,
+        "top_bar_url": top_bar_url,
+        "permalink": meta.get("permalink") or meta.get("source_url"),
         "shortcode": meta.get("shortcode"),
         "meta": meta,
     }
@@ -39,6 +42,8 @@ def job_list_item(job) -> dict:
         "risk_score": job.risk_score,
         "category": job.category,
         "source": source_info(job),
-        "description": (job.description or "")[:240],
+        "description": job.description or "",
+        "created_at": job.created_at.isoformat() if job.created_at else None,
+        "updated_at": job.updated_at.isoformat() if job.updated_at else None,
         "method_confidences": method_confidences(job.findings),
     }

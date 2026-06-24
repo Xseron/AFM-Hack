@@ -1,0 +1,7 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\881b309610254998a2855686987635ab\DXEccpzDGyj.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Ты в начале
+Не imaginала мне, что я поделила

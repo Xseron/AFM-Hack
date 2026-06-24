@@ -1,0 +1,6 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\53ceee69143c4b969038bd575af96f4a\DY24nubNsuU.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Всегда дорожаю, как санябелый, всегда ты чаю забазар, МК идёт Богом, Хейтер идёт так же, темы идёт...

@@ -63,24 +63,75 @@ async def test_ui_served(app_client):
     assert "Upload and Check" in resp.text
     assert "Clear Dedup" in resp.text
     assert "Priority List" in resp.text
+    assert "Recent Reels" in resp.text
+    assert "Description" in resp.text
 
 
 async def test_priority_list_includes_method_confidences(app_client):
     client, _ = app_client
     files = {"video": ("clip.mp4", b"\x44\x55\x66", "video/mp4")}
-    created = await client.post("/videos", files=files, data={"description": "casino 100%"})
+    created = await client.post(
+        "/videos",
+        files=files,
+        data={
+            "description": "casino 100%",
+            "source_platform": "instagram",
+            "source_url": "https://www.instagram.com/reel/abc123/",
+            "source_meta": '{"shortcode":"abc123"}',
+        },
+    )
     assert created.status_code == 202
 
     resp = await client.get("/priority-list")
     assert resp.status_code == 200
     item = resp.json()["items"][0]
     assert item["job_id"] == created.json()["job_id"]
+    assert item["source"]["platform"] == "instagram"
+    assert item["source"]["shortcode"] == "abc123"
+    assert item["source"]["url"] == "https://www.instagram.com/reel/abc123/"
+    assert item["source"]["top_bar_url"] == "https://www.instagram.com/reel/abc123/"
+    assert item["description"] == "casino 100%"
     assert item["method_confidences"] == {
         "semantic": 0.0,
         "ocr": 0.0,
         "clip": 0.0,
         "audio": 0.0,
     }
+
+
+async def test_recent_jobs_sorted_newest_first_with_scores(app_client):
+    client, _ = app_client
+    first = await client.post(
+        "/videos",
+        files={"video": ("first.mp4", b"first", "video/mp4")},
+        data={
+            "description": "first",
+            "source_platform": "instagram",
+            "source_url": "https://www.instagram.com/reels/first/",
+            "source_meta": '{"shortcode":"first","top_bar_url":"https://www.instagram.com/reels/first/","permalink":"https://www.instagram.com/reel/first/"}',
+        },
+    )
+    second = await client.post(
+        "/videos",
+        files={"video": ("second.mp4", b"second", "video/mp4")},
+        data={
+            "description": "second",
+            "source_platform": "instagram",
+            "source_url": "https://www.instagram.com/reels/second/",
+            "source_meta": '{"shortcode":"second","top_bar_url":"https://www.instagram.com/reels/second/","permalink":"https://www.instagram.com/reel/second/"}',
+        },
+    )
+
+    resp = await client.get("/recent-jobs")
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert items[0]["job_id"] == second.json()["job_id"]
+    assert items[1]["job_id"] == first.json()["job_id"]
+    assert items[0]["source"]["top_bar_url"] == "https://www.instagram.com/reels/second/"
+    assert items[0]["source"]["permalink"] == "https://www.instagram.com/reel/second/"
+    assert items[0]["description"] == "second"
+    assert set(items[0]["method_confidences"]) == {"semantic", "ocr", "clip", "audio"}
+    assert items[0]["created_at"]
 
 
 async def test_post_video_rejects_empty_description(app_client):

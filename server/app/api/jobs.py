@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.deps import get_components
-from app.api.serializers import method_confidences
+from app.api.serializers import method_confidences, source_info
 
 router = APIRouter()
 
@@ -20,6 +20,7 @@ async def get_job(job_id: str, components=Depends(get_components)) -> dict:
         "risk_score": job.risk_score,
         "category": job.category,
         "method_confidences": method_confidences(job.findings),
+        "source": source_info(job),
         "description": job.description,
         "error": job.error,
         "findings": [

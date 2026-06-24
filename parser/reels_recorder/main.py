@@ -33,9 +33,13 @@ def _watch(page: Page, cfg: Config) -> None:
 
 
 def _handle_reel(page: Page, cfg: Config, client: ServerClient, code: str) -> None:
+    permalink = f"https://www.instagram.com/reel/{code}/"
+    top_bar_url = page.url or permalink
     meta = {
         "shortcode": code,
-        "source_url": f"https://www.instagram.com/reel/{code}/",
+        "source_url": top_bar_url,
+        "top_bar_url": top_bar_url,
+        "permalink": permalink,
     }
     cap = feed.caption(page, code)
 
@@ -89,8 +93,8 @@ def run(cfg: Config) -> int:
 
     try:
         browser.ensure_reels_feed(page, cfg)
-        if browser.is_logged_out(page):
-            print("[error] session looks logged out. Log in manually first; no auto-login.")
+        if not browser.login_if_needed(page, cfg):
+            print("[error] session looks logged out. Log in manually first or enable INSTAGRAM_AUTO_LOGIN.")
             return 3
         browser.save_session(context, cfg)
 
