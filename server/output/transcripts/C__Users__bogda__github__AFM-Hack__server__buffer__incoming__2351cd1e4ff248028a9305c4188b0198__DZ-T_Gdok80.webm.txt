@@ -1,0 +1,6 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\2351cd1e4ff248028a9305c4188b0198\DZ-T_Gdok80.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Редактор субтитров А.Синецкая Корректор А.Егорова

@@ -1,0 +1,14 @@
+
+=== start https://www.instagram.com/cristiano/ @ Thu Jun 25 03:04:04 2026 ===
+[LIVE] parsing channel https://www.instagram.com/cristiano/. server=http://localhost:8000  out=recordings
+[channel] opening https://www.instagram.com/cristiano/reels/
+
+=== start https://www.instagram.com/mom_ale_na @ Thu Jun 25 03:12:28 2026 ===
+[LIVE] parsing channel https://www.instagram.com/mom_ale_na. server=http://localhost:8000  out=recordings
+[channel] opening https://www.instagram.com/mom_ale_na/reels/
+[channel] found 10 reel(s)
+[sent] DZ-T_Gdok80 (941 KB)
+[warn] empty clip for DZ-RonQoLcm (stream may be CORS-tainted); skipped upload
+[sent] DZ-NO4rK1Ex (800 KB)
+[sent] DZ-JhPuqVn- (748 KB)
+[sent] DZ9unn3IgZE (794 KB)

@@ -203,6 +203,26 @@ PAGE = """
     </section>
 
     <section>
+      <h2>Parse Channel</h2>
+      <p class="status">Point the parser-bot at an Instagram profile to record and check its reels. Requires the anti-detect browser running with CDP and a logged-in session.</p>
+      <form id="parserForm">
+        <label>Channel URL or handle
+          <input id="channelUrl" name="channel_url" placeholder="https://www.instagram.com/username/  or  @username">
+        </label>
+        <div class="row">
+          <label>Max reels
+            <input id="maxReels" name="max_reels" type="number" min="1" placeholder="server default">
+          </label>
+          <div class="actions">
+            <button id="startParserBtn" type="submit">Start Parsing</button>
+            <button id="stopParserBtn" class="secondary" type="button">Stop</button>
+          </div>
+        </div>
+        <div id="parserStatus" class="status">Checking parser status...</div>
+      </form>
+    </section>
+
+    <section>
       <h2>Find Existing Result</h2>
       <div class="row">
         <label>Job ID
@@ -414,6 +434,70 @@ PAGE = """
       }
     });
 
+    function renderParserStatus(s) {
+      const el = $("parserStatus");
+      if (s && s.running) {
+        const since = s.started_at ? new Date(s.started_at * 1000).toLocaleTimeString() : "";
+        el.textContent = `Running — channel ${s.channel} (pid ${s.pid}${since ? ", since " + since : ""}).`;
+        el.className = "status warn";
+        $("startParserBtn").disabled = true;
+        $("stopParserBtn").disabled = false;
+      } else {
+        el.textContent = "Parser idle.";
+        el.className = "status";
+        $("startParserBtn").disabled = false;
+        $("stopParserBtn").disabled = true;
+      }
+    }
+
+    async function loadParserStatus() {
+      try {
+        const res = await fetch("/parser/status");
+        if (!res.ok) return;
+        renderParserStatus(await res.json());
+      } catch (_) {}
+    }
+
+    $("parserForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const channel = $("channelUrl").value.trim();
+      if (!channel) { $("parserStatus").textContent = "Enter a channel URL or handle."; return; }
+      $("startParserBtn").disabled = true;
+      try {
+        const max = parseInt($("maxReels").value, 10);
+        const body = { channel_url: channel };
+        if (!Number.isNaN(max) && max > 0) body.max_reels = max;
+        const res = await fetch("/parser/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const detail = await res.json().catch(() => ({}));
+          throw new Error(detail.detail || (await res.text()));
+        }
+        renderParserStatus(await res.json());
+      } catch (err) {
+        $("parserStatus").textContent = err.message || String(err);
+        $("parserStatus").className = "status risk";
+        $("startParserBtn").disabled = false;
+      }
+    });
+
+    $("stopParserBtn").addEventListener("click", async () => {
+      $("stopParserBtn").disabled = true;
+      try {
+        const res = await fetch("/parser/stop", { method: "POST" });
+        if (!res.ok) throw new Error(await res.text());
+        renderParserStatus(await res.json());
+        await loadRecentJobs();
+      } catch (err) {
+        $("parserStatus").textContent = err.message || String(err);
+        $("parserStatus").className = "status risk";
+        $("stopParserBtn").disabled = false;
+      }
+    });
+
     async function loadModels() {
       const res = await fetch("/models");
       if (!res.ok) return;
@@ -502,10 +586,12 @@ PAGE = """
     loadModels().catch(() => {});
     loadPriorityList().catch(() => {});
     loadRecentJobs().catch(() => {});
+    loadParserStatus().catch(() => {});
     setInterval(() => {
       loadPriorityList().catch(() => {});
       loadRecentJobs().catch(() => {});
       loadModels().catch(() => {});
+      loadParserStatus().catch(() => {});
     }, 3000);
   </script>
 </body>

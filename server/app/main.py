@@ -6,11 +6,12 @@ from dataclasses import dataclass
 
 from fastapi import FastAPI
 
-from app.api import dedup, health, jobs, pipelines, review, ui, videos
+from app.api import dedup, health, jobs, parser, pipelines, review, ui, videos
 from app.config import Settings, get_settings
 from app.db.repository import JobRepository
 from app.db.session import init_db, make_engine, make_sessionmaker
 from app.dedup.neardup import NearDupIndex, NullNearDupIndex
+from app.parser_control import ParserController
 from app.pipelines.extract import Extractor, StubExtractor
 from app.pipelines.registry import PipelineRegistry
 from app.pipelines.stubs import build_registry
@@ -29,6 +30,7 @@ class Components:
     registry: PipelineRegistry
     extractor: Extractor
     neardup: NearDupIndex
+    parser: ParserController
     models: object | None = None
 
 
@@ -58,6 +60,10 @@ def build_components(settings: Settings) -> Components:
         registry=registry,
         extractor=StubExtractor(),
         neardup=NullNearDupIndex(),
+        parser=ParserController(
+            parser_dir=settings.parser_dir,
+            server_url=settings.parser_server_url,
+        ),
         models=models,
     )
 
@@ -105,7 +111,7 @@ def create_app(settings: Settings | None = None, components: Components | None =
     app = FastAPI(title="AI Media Watch", lifespan=lifespan)
     app.state.components = components
 
-    for module in (ui, health, videos, jobs, review, pipelines, dedup):
+    for module in (ui, health, videos, jobs, review, pipelines, dedup, parser):
         app.include_router(module.router)
     return app
 

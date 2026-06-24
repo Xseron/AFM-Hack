@@ -1,0 +1,6 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\804bf35512c348a68c09870a5c024a23\DZ9unn3IgZE.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+А дзн эксомод, а дзн...

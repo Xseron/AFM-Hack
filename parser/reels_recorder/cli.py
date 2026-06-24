@@ -28,6 +28,8 @@ class Config:
     out_dir: str = "recordings"
     state_dir: str = "state"
     max_reels: int | None = None
+    # When set, parse reels from this profile/channel instead of the global feed.
+    channel_url: str = ""
     instagram_username: str = ""
     instagram_password: str = ""
     auto_login: bool = False
@@ -98,6 +100,8 @@ def parse_args(argv: list[str] | None = None) -> Config:
                    help="Directory for saved .webm clips.")
     p.add_argument("--max-reels", type=int, default=_env_int("REELS_MAX_REELS"),
                    help="Stop after recording this many new reels (for testing).")
+    p.add_argument("--channel", dest="channel_url", default=os.getenv("REELS_CHANNEL", ""),
+                   help="Parse reels from this profile/channel URL instead of the global feed.")
     p.add_argument("--auto-login", action="store_true", default=_env_bool("INSTAGRAM_AUTO_LOGIN"),
                    help="Try to log in using INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD from .env.")
     a = p.parse_args(argv)
@@ -107,6 +111,7 @@ def parse_args(argv: list[str] | None = None) -> Config:
         server_url=a.server_url,
         out_dir=a.out_dir,
         max_reels=a.max_reels,
+        channel_url=a.channel_url.strip(),
         instagram_username=os.getenv("INSTAGRAM_USERNAME", ""),
         instagram_password=os.getenv("INSTAGRAM_PASSWORD", ""),
         auto_login=a.auto_login,

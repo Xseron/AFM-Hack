@@ -174,6 +174,43 @@ def find_follow(page: Page, cfg: Config) -> Locator | None:
     return None
 
 
+def channel_reels_url(url: str) -> str:
+    """Normalize any profile/channel link into its Reels tab URL."""
+    u = (url or "").strip()
+    m = re.search(r"instagram\.com/([A-Za-z0-9._]+)", u)
+    user = m.group(1) if m else u.strip("/@ ")
+    return f"https://www.instagram.com/{user}/reels/"
+
+
+def channel_shortcodes(page: Page) -> list[str]:
+    """Reel shortcodes currently present in the profile's Reels grid, in order."""
+    js = """
+    () => {
+      const out = [], seen = new Set();
+      for (const a of document.querySelectorAll('a[href]')) {
+        const m = (a.getAttribute('href') || '').match(/\\/reel\\/([A-Za-z0-9_-]+)/);
+        if (m && !seen.has(m[1])) { seen.add(m[1]); out.push(m[1]); }
+      }
+      return out;
+    }
+    """
+    try:
+        return list(page.evaluate(js) or [])
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def scroll_window(page: Page) -> None:
+    """Scroll the page (the profile grid) down to lazy-load more reels."""
+    try:
+        page.evaluate("() => window.scrollBy(0, window.innerHeight * 0.9)")
+    except Exception:  # noqa: BLE001
+        try:
+            page.keyboard.press("End")
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def scroll_next(page: Page) -> None:
     """Advance to the next reel with a slightly varied gesture."""
     size = page.viewport_size or {"width": 1280, "height": 800}

@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     ocr_backend: str = "rapidocr"  # auto | rapidocr | tesseract | easyocr
     transcripts_dir: str = "./output/transcripts"
 
+    # Reels parser-bot launched from the UI. parser_dir empty = auto-detect
+    # (<repo>/parser); parser_server_url is the URL the bot uploads back to.
+    parser_dir: str = ""
+    parser_server_url: str = "http://localhost:8000"
+    parser_max_reels: int = 30
+
     @property
     def enabled_pipeline_list(self) -> list[str]:
         return [name.strip() for name in self.enabled_pipelines.split(",") if name.strip()]
