@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
 
@@ -51,6 +51,13 @@ class JobRepository:
         async with self._sf() as s:
             stmt = select(Job).where(Job.content_hash == content_hash)
             return (await s.execute(stmt)).scalar_one_or_none()
+
+    async def clear_content_hashes(self) -> int:
+        async with self._sf() as s:
+            stmt = update(Job).where(Job.content_hash.is_not(None)).values(content_hash=None)
+            result = await s.execute(stmt)
+            await s.commit()
+            return int(result.rowcount or 0)
 
     async def _update(self, job_id: str, **values) -> None:
         async with self._sf() as s:

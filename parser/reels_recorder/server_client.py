@@ -33,7 +33,7 @@ class ServerClient:
         except Exception as e:  # noqa: BLE001
             print(f"[warn] upload failed for {code}: {e}")
             return {}
-        print(f"✓ sent to server: {code} ({kb:.0f} KB)")
+        print(f"[sent] {code} ({kb:.0f} KB)")
         try:
             return r.json()
         except Exception:  # noqa: BLE001

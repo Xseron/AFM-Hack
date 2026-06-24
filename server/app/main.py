@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from fastapi import FastAPI
 
-from app.api import health, jobs, pipelines, review, videos
+from app.api import dedup, health, jobs, pipelines, review, ui, videos
 from app.config import Settings, get_settings
 from app.db.repository import JobRepository
 from app.db.session import init_db, make_engine, make_sessionmaker
@@ -105,7 +105,7 @@ def create_app(settings: Settings | None = None, components: Components | None =
     app = FastAPI(title="AI Media Watch", lifespan=lifespan)
     app.state.components = components
 
-    for module in (health, videos, jobs, review, pipelines):
+    for module in (ui, health, videos, jobs, review, pipelines, dedup):
         app.include_router(module.router)
     return app
 

@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     allow_model_downloads: bool = False  # else load from local HF cache only
     whisper_model: str = "base"
     clip_model: str = "openai/clip-vit-base-patch32"
-    embedding_backend: str = "tfidf"  # tfidf | sentence-transformers | hybrid
+    embedding_backend: str = "hybrid"  # tfidf | sentence-transformers | hybrid
     ocr_backend: str = "rapidocr"  # auto | rapidocr | tesseract | easyocr
     transcripts_dir: str = "./output/transcripts"
 

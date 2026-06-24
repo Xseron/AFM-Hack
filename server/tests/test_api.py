@@ -37,6 +37,33 @@ async def test_post_duplicate_video_short_circuits(app_client):
     assert second_body["job_id"] == first_body["job_id"]
 
 
+async def test_clear_dedup_allows_same_video_again(app_client):
+    client, _ = app_client
+    payload = {"video": ("clip.mp4", b"\x10\x20\x30", "video/mp4")}
+    first = await client.post("/videos", files=payload, data={"description": "casino"})
+    first_body = first.json()
+
+    duplicate = {"video": ("clip.mp4", b"\x10\x20\x30", "video/mp4")}
+    assert (await client.post("/videos", files=duplicate, data={"description": "casino"})).json()["duplicate"] is True
+
+    cleared = await client.post("/dedup/clear")
+    assert cleared.status_code == 200
+    assert cleared.json()["cleared"] == 1
+
+    after_clear = {"video": ("clip.mp4", b"\x10\x20\x30", "video/mp4")}
+    after_body = (await client.post("/videos", files=after_clear, data={"description": "casino"})).json()
+    assert after_body["duplicate"] is False
+    assert after_body["job_id"] != first_body["job_id"]
+
+
+async def test_ui_served(app_client):
+    client, _ = app_client
+    resp = await client.get("/")
+    assert resp.status_code == 200
+    assert "Upload and Check" in resp.text
+    assert "Clear Dedup" in resp.text
+
+
 async def test_post_video_rejects_empty_description(app_client):
     client, _ = app_client
     files = {"video": ("clip.mp4", b"\x00", "video/mp4")}

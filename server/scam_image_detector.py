@@ -122,10 +122,88 @@ class DetectionResult:
     ocr_text: str
 
 
+_CONFUSABLE_TRANSLATION = str.maketrans({
+    "A": "\u0410",
+    "a": "\u0430",
+    "B": "\u0412",
+    "C": "\u0421",
+    "c": "\u0441",
+    "E": "\u0415",
+    "e": "\u0435",
+    "H": "\u041d",
+    "K": "\u041a",
+    "M": "\u041c",
+    "O": "\u041e",
+    "o": "\u043e",
+    "P": "\u0420",
+    "p": "\u0440",
+    "T": "\u0422",
+    "X": "\u0425",
+    "x": "\u0445",
+    "Y": "\u0423",
+    "y": "\u0443",
+    "b": "\u044c",
+    "I": "\u042b",
+    "l": "\u044b",
+})
+
+_OCR_TOKEN_REPAIRS = {
+    "nnwn": "\u043f\u0438\u0448\u0438",
+    "nwn": "\u043f\u0438\u0448\u0438",
+    "mnwn": "\u043f\u0438\u0448\u0438",
+    "homep": "\u043d\u043e\u043c\u0435\u0440",
+    "kaptbi": "\u043a\u0430\u0440\u0442\u044b",
+    "kaptbl": "\u043a\u0430\u0440\u0442\u044b",
+    "homepkaptbi": "\u043d\u043e\u043c\u0435\u0440 \u043a\u0430\u0440\u0442\u044b",
+    "homepkaptbl": "\u043d\u043e\u043c\u0435\u0440 \u043a\u0430\u0440\u0442\u044b",
+    "otnpabnaio": "\u043e\u0442\u043f\u0440\u0430\u0432\u043b\u044f\u044e",
+    "cpean": "\u0441\u0440\u0435\u0434\u0438",
+    "cpea": "\u0441\u0440\u0435\u0434\u0438",
+    "noanncunkob": "\u043f\u043e\u0434\u043f\u0438\u0441\u0447\u0438\u043a\u043e\u0432",
+    "noanncynkob": "\u043f\u043e\u0434\u043f\u0438\u0441\u0447\u0438\u043a\u043e\u0432",
+}
+
+
+def repair_mojibake(text: str) -> str:
+    """Recover UTF-8 Russian text that was decoded as cp1251."""
+    try:
+        repaired = text.encode("cp1251").decode("utf-8")
+    except UnicodeError:
+        return text
+    return repaired if repaired != text and "\ufffd" not in repaired else text
+
+
+def repair_ocr_confusables(text: str) -> str:
+    """Add a Cyrillic-like variant for OCR that returns Latin homoglyphs."""
+    low = text.lower()
+    for bad, good in _OCR_TOKEN_REPAIRS.items():
+        low = re.sub(rf"(?<!\w){re.escape(bad)}(?!\w)", good, low)
+    return low.translate(_CONFUSABLE_TRANSLATION)
+
+
+def normalized_variants(text: str) -> list[str]:
+    repaired = repair_mojibake(text)
+    variants = [text, repaired, repair_ocr_confusables(text)]
+    if repaired != text:
+        variants.append(repair_ocr_confusables(repaired))
+    return variants
+
+
+def _join_unique_variants(variants: Iterable[str]) -> str:
+    seen: set[str] = set()
+    cleaned: list[str] = []
+    for variant in variants:
+        value = variant.replace("|", " ").replace("_", " ")
+        value = re.sub(r"\s+", " ", value).strip().lower()
+        if value and value not in seen:
+            seen.add(value)
+            cleaned.append(value)
+    return " ".join(cleaned)
+
+
 def normalize_text(text: str) -> str:
-    text = text.lower().replace("ё", "е")
-    text = text.replace("|", " ").replace("_", " ")
-    return re.sub(r"\s+", " ", text).strip()
+    text = _join_unique_variants(normalized_variants(text))
+    return text.replace("\u0451", "\u0435")
 
 
 def strip_ocr_metadata(text: str) -> str:

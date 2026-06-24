@@ -1,0 +1,8 @@
+Loading Whisper model: base (device=cpu, compute_type=int8)
+Loading CLIP model: openai/clip-vit-base-patch32
+Loading embedding model: sentence-transformers/distilbert-base-nli-stsb-mean-tokens
+INFO:     127.0.0.1:50127 - "GET /models HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61502 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61503 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55362 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55362 - "GET /models HTTP/1.1" 200 OK

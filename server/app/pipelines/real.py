@@ -212,28 +212,58 @@ class OcrScamPipeline:
         video_path = _video_path(ctx)
         if video_path is None:
             return []
-        result = await asyncio.to_thread(self._run, video_path)
-        if result is None:
+        scored = await asyncio.to_thread(self._run, video_path)
+        if scored is None:
             return []
+        ocr, result, normalized_text = scored
+        top_terms = _term_pairs(result.matched_terms)
+        has_semantic_signal = (
+            bool(result.matched_terms)
+            or result.predicted_label == "scam"
+            or result.scam_similarity > result.clean_similarity + 0.03
+        )
+        confidence = float(result.scam_probability) if has_semantic_signal else 0.0
+        signal_type = (
+            f"ocr_scam:{_top_term(result.matched_terms)}"
+            if has_semantic_signal
+            else "ocr_text_low_signal"
+        )
+        evidence = {
+            "ocr_excerpt": (ocr.text or "")[:300],
+            "normalized_ocr_excerpt": normalized_text[:300],
+            "top_terms": top_terms,
+            "scam_similarity": result.scam_similarity,
+            "clean_similarity": result.clean_similarity,
+            "keyword_score": result.keyword_score,
+            "frame_count": result.frame_count,
+            "semantic_checked": has_semantic_signal,
+        }
         return [
             Finding(
                 modality="ocr",
-                signal_type=f"ocr_scam:{_top_term(result.matched_terms)}",
-                confidence=float(result.scam_probability),
-                evidence={
-                    # "top_terms": _term_pairs(result.matched_terms),
-                    "ocr_excerpt": (result.ocr_text or "")[:300],
-                },
+                signal_type=signal_type,
+                confidence=confidence,
+                evidence=evidence,
             )
         ]
 
     def _run(self, video_path: Path):
+        import scam_image_detector as sid
+
         ocr = self._m.ocr_extractor.extract(video_path)
-        return self._m.visual_embed.classify(ocr)
+        result = self._m.visual_embed.classify(ocr)
+        return ocr, result, sid.normalize_text(ocr.text)
 
     async def explain(self, ctx: JobContext, findings: list[Finding]) -> Explanation | None:
         if not findings:
             return None
+        if not findings[0].evidence.get("semantic_checked"):
+            return Explanation(
+                scope="ocr",
+                method="quality_gate",
+                attributions=[],
+                summary="OCR text extracted, but semantic scam signal was too weak to score as risk",
+            )
         return Explanation(
             scope="ocr",
             method="embedding",
