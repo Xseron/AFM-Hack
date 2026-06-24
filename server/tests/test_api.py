@@ -62,6 +62,25 @@ async def test_ui_served(app_client):
     assert resp.status_code == 200
     assert "Upload and Check" in resp.text
     assert "Clear Dedup" in resp.text
+    assert "Priority List" in resp.text
+
+
+async def test_priority_list_includes_method_confidences(app_client):
+    client, _ = app_client
+    files = {"video": ("clip.mp4", b"\x44\x55\x66", "video/mp4")}
+    created = await client.post("/videos", files=files, data={"description": "casino 100%"})
+    assert created.status_code == 202
+
+    resp = await client.get("/priority-list")
+    assert resp.status_code == 200
+    item = resp.json()["items"][0]
+    assert item["job_id"] == created.json()["job_id"]
+    assert item["method_confidences"] == {
+        "semantic": 0.0,
+        "ocr": 0.0,
+        "clip": 0.0,
+        "audio": 0.0,
+    }
 
 
 async def test_post_video_rejects_empty_description(app_client):

@@ -1,0 +1,7 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\6f6245e0805f487db96c91b3a394e335\da2.mp4
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Вы understand everything
+You see it plainly

@@ -10,6 +10,7 @@ one pipeline instead of crashing the server.
 from __future__ import annotations
 
 import logging
+import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,6 +33,9 @@ class Models:
     visual_embed: object | None = None  # scam_image_detector.VisualScamEmbeddingDetector
     clip: object | None = None  # casino_clip_detector.ClipCasinoDetector
     transcripts_dir: Path | None = None
+    requested_device: str = "cpu"
+    torch_device: str = "cpu"
+    whisper_device: str = "cpu"
 
     def available(self) -> dict[str, bool]:
         return {
@@ -42,15 +46,53 @@ class Models:
             "clip": self.clip is not None,
         }
 
+    def devices(self) -> dict[str, str]:
+        return {
+            "requested": self.requested_device,
+            "torch": self.torch_device,
+            "whisper": self.whisper_device,
+        }
 
-def _make_ocr_engine(sid, settings: Settings):
+
+def _torch_device(requested: str) -> str:
+    if requested != "cuda":
+        return "cpu"
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            return "cuda"
+        log.warning("CUDA requested, but PyTorch is CPU-only or cannot see CUDA; using CPU for torch models")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("CUDA requested, but torch CUDA check failed (%s); using CPU for torch models", exc)
+    return "cpu"
+
+
+def _whisper_device(requested: str) -> str:
+    if requested != "cuda":
+        return "cpu"
+    if shutil.which("cudnn_ops64_9.dll") is None:
+        log.warning("CUDA requested for Whisper, but cudnn_ops64_9.dll is not on PATH; using CPU")
+        return "cpu"
+    try:
+        import ctranslate2
+
+        if ctranslate2.get_cuda_device_count() > 0:
+            return "cuda"
+        log.warning("CUDA requested for Whisper, but CTranslate2 sees no CUDA device; using CPU")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("CUDA requested for Whisper, but CTranslate2 CUDA check failed (%s); using CPU", exc)
+    return "cpu"
+
+
+def _make_ocr_engine(sid, settings: Settings, torch_device: str):
     backend = settings.ocr_backend
     if backend in ("auto", "rapidocr"):
         return sid.RapidOcrEngine(min_confidence=0.45, lang="cyrillic")
     if backend == "easyocr":
         return sid.EasyOcrEngine(
             languages=["ru", "en"],
-            gpu=settings.model_device == "cuda",
+            gpu=torch_device == "cuda",
             model_storage_directory=None,
             download_enabled=settings.allow_model_downloads,
         )
@@ -64,7 +106,14 @@ def load_models(settings: Settings) -> Models:
     """Instantiate and warm the detectors that this environment supports."""
     transcripts_dir = Path(settings.transcripts_dir)
     transcripts_dir.mkdir(parents=True, exist_ok=True)
-    models = Models(transcripts_dir=transcripts_dir)
+    torch_device = _torch_device(settings.model_device)
+    whisper_device = _whisper_device(settings.model_device)
+    models = Models(
+        transcripts_dir=transcripts_dir,
+        requested_device=settings.model_device,
+        torch_device=torch_device,
+        whisper_device=whisper_device,
+    )
     local_only = not settings.allow_model_downloads
 
     # Russian scam keyword/TF-IDF detector (cheap; only needs scikit-learn).
@@ -86,11 +135,11 @@ def load_models(settings: Settings) -> Models:
     try:
         import audio_detect as ad
 
-        compute_type = "float16" if settings.model_device == "cuda" else "int8"
+        compute_type = "float16" if whisper_device == "cuda" else "int8"
         whisper = ad.WhisperTranscriber(
             model_name=settings.whisper_model,
             language="ru",
-            device=settings.model_device,
+            device=whisper_device,
             compute_type=compute_type,
             local_files_only=local_only,
         )
@@ -105,7 +154,7 @@ def load_models(settings: Settings) -> Models:
 
         models.clip = ccd.ClipCasinoDetector(
             model_name=settings.clip_model,
-            device=settings.model_device,
+            device=torch_device,
             local_files_only=local_only,
             threshold=0.5,
             aggregation="max",
@@ -121,7 +170,7 @@ def load_models(settings: Settings) -> Models:
             backend=settings.embedding_backend,
             embedding_model=sid.DEFAULT_EMBEDDING_MODEL,
             local_files_only=local_only,
-            device=settings.model_device,
+            device=torch_device,
             threshold=0.5,
             temperature=0.09,
             keyword_weight=0.04,
@@ -133,7 +182,7 @@ def load_models(settings: Settings) -> Models:
     try:
         import scam_image_detector as sid
 
-        engine = _make_ocr_engine(sid, settings)
+        engine = _make_ocr_engine(sid, settings, torch_device)
         models.ocr_extractor = sid.MediaOcrExtractor(
             engine=engine,
             output_dir=transcripts_dir.parent / "ocr",

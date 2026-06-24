@@ -120,6 +120,17 @@ class JobRepository:
             stmt = (
                 select(Job)
                 .order_by(Job.risk_score.is_(None), Job.risk_score.desc(), Job.priority.desc())
+                .options(selectinload(Job.findings))
+                .limit(limit)
+            )
+            return list((await s.execute(stmt)).scalars().all())
+
+    async def priority_queue(self, limit: int = 50) -> list[Job]:
+        async with self._sf() as s:
+            stmt = (
+                select(Job)
+                .order_by(Job.priority.desc(), Job.created_at.desc())
+                .options(selectinload(Job.findings))
                 .limit(limit)
             )
             return list((await s.execute(stmt)).scalars().all())

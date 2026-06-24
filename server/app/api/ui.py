@@ -109,6 +109,12 @@ PAGE = """
       gap: 10px;
       margin-bottom: 14px;
     }
+    .confidence-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin: 0 0 14px;
+    }
     .metric {
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -161,7 +167,7 @@ PAGE = """
     .pill.on { color: var(--good); border-color: #abefc6; background: #ecfdf3; }
     .pill.off { color: var(--warn); border-color: #fedf89; background: #fffaeb; }
     @media (max-width: 760px) {
-      .summary { grid-template-columns: 1fr 1fr; }
+      .summary, .confidence-grid { grid-template-columns: 1fr 1fr; }
       .row { grid-template-columns: 1fr; }
       button { width: 100%; }
     }
@@ -207,9 +213,23 @@ PAGE = """
         <div class="metric"><span>Risk</span><strong id="riskScore">-</strong></div>
         <div class="metric"><span>Category</span><strong id="category">-</strong></div>
       </div>
+      <div class="confidence-grid">
+        <div class="metric"><span>Semantic</span><strong id="semanticConfidence">-</strong></div>
+        <div class="metric"><span>OCR</span><strong id="ocrConfidence">-</strong></div>
+        <div class="metric"><span>CLIP</span><strong id="clipConfidence">-</strong></div>
+        <div class="metric"><span>Audio</span><strong id="audioConfidence">-</strong></div>
+      </div>
       <table>
         <thead><tr><th>Modality</th><th>Signal</th><th>Confidence</th><th>Evidence</th></tr></thead>
         <tbody id="findings"><tr><td colspan="4">No result loaded.</td></tr></tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Priority List</h2>
+      <table>
+        <thead><tr><th>Job</th><th>Status</th><th>Priority</th><th>Risk</th><th>Semantic</th><th>OCR</th><th>CLIP</th><th>Audio</th></tr></thead>
+        <tbody id="priorityList"><tr><td colspan="8">No priority data loaded.</td></tr></tbody>
       </table>
     </section>
 
@@ -240,6 +260,7 @@ PAGE = """
       $("riskScore").textContent = typeof job.risk_score === "number" ? job.risk_score.toFixed(3) : "-";
       $("category").textContent = job.category || "-";
       $("category").className = job.category && job.category !== "clean" ? "risk" : "clean";
+      setConfidenceMetrics(job.method_confidences || {});
 
       const rows = (job.findings || []).map((f) => `
         <tr>
@@ -250,6 +271,17 @@ PAGE = """
         </tr>
       `);
       $("findings").innerHTML = rows.length ? rows.join("") : "<tr><td colspan='4'>No findings.</td></tr>";
+    }
+
+    function formatConfidence(value) {
+      return typeof value === "number" ? value.toFixed(3) : "-";
+    }
+
+    function setConfidenceMetrics(conf) {
+      $("semanticConfidence").textContent = formatConfidence(conf.semantic);
+      $("ocrConfidence").textContent = formatConfidence(conf.ocr);
+      $("clipConfidence").textContent = formatConfidence(conf.clip);
+      $("audioConfidence").textContent = formatConfidence(conf.audio);
     }
 
     function escapeHtml(value) {
@@ -272,6 +304,7 @@ PAGE = """
         if (pollTimer) clearInterval(pollTimer);
         pollTimer = null;
         await loadExplanations(job.job_id);
+        await loadPriorityList();
         setStatus(job.status === "done" ? "Analysis complete." : "Analysis failed.", job.status === "failed");
       } else if (poll) {
         setStatus(`Job ${job.status}; waiting for analysis...`);
@@ -321,6 +354,7 @@ PAGE = """
       try {
         setStatus("Loading result...");
         await loadJob(jobId);
+        await loadPriorityList();
         setStatus("Result loaded.");
       } catch (err) {
         setStatus(err.message || String(err), true);
@@ -336,6 +370,7 @@ PAGE = """
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
         setStatus(`Dedup cleared for ${data.cleared} job(s).`);
+        await loadPriorityList();
       } catch (err) {
         setStatus(err.message || String(err), true);
       } finally {
@@ -347,8 +382,12 @@ PAGE = """
       const res = await fetch("/models");
       if (!res.ok) return;
       const data = await res.json();
+      const devices = data.devices || {};
+      const deviceText = devices.requested
+        ? `requested: ${devices.requested}, torch: ${devices.torch}, whisper: ${devices.whisper}`
+        : `requested: ${data.model_device}`;
       $("modelStatus").textContent = data.models_enabled
-        ? `Real model mode is enabled. OCR embedding backend: ${data.embedding_backend}.`
+        ? `Real model mode is enabled. OCR embedding backend: ${data.embedding_backend}. Devices: ${deviceText}.`
         : "Stub mode is active. Set MW_MODELS_ENABLED=true to load real models at startup.";
       const entries = Object.entries(data.available || {});
       $("models").innerHTML = entries.length
@@ -356,7 +395,30 @@ PAGE = """
         : "<span class='pill off'>no model object</span>";
     }
 
+    async function loadPriorityList() {
+      const res = await fetch("/priority-list");
+      if (!res.ok) return;
+      const data = await res.json();
+      const rows = (data.items || []).map((item) => {
+        const c = item.method_confidences || {};
+        return `
+          <tr>
+            <td>${escapeHtml(item.job_id || "")}</td>
+            <td>${escapeHtml(item.status || "")}</td>
+            <td>${formatConfidence(item.priority)}</td>
+            <td>${formatConfidence(item.risk_score)}</td>
+            <td>${formatConfidence(c.semantic)}</td>
+            <td>${formatConfidence(c.ocr)}</td>
+            <td>${formatConfidence(c.clip)}</td>
+            <td>${formatConfidence(c.audio)}</td>
+          </tr>
+        `;
+      });
+      $("priorityList").innerHTML = rows.length ? rows.join("") : "<tr><td colspan='8'>No jobs yet.</td></tr>";
+    }
+
     loadModels().catch(() => {});
+    loadPriorityList().catch(() => {});
   </script>
 </body>
 </html>
@@ -374,6 +436,7 @@ async def models(components=Depends(get_components)) -> dict:
     return {
         "models_enabled": components.settings.models_enabled,
         "model_device": components.settings.model_device,
+        "devices": components.models.devices() if components.models is not None else {},
         "allow_model_downloads": components.settings.allow_model_downloads,
         "embedding_backend": components.settings.embedding_backend,
         "available": loaded,

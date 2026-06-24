@@ -1,8 +1,27 @@
 Loading Whisper model: base (device=cpu, compute_type=int8)
 Loading CLIP model: openai/clip-vit-base-patch32
 Loading embedding model: sentence-transformers/distilbert-base-nli-stsb-mean-tokens
-INFO:     127.0.0.1:50127 - "GET /models HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61502 - "GET /openapi.json HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61503 - "GET / HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55362 - "GET / HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55362 - "GET /models HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61313 - "GET /models HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52586 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52586 - "GET /models HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51378 - "GET /priority-list HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51378 - "POST /dedup/clear HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51378 - "GET /priority-list HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63992 - "POST /videos HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:63992 - "GET /jobs/e811df3f75af4325a959c7926c39f017 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63992 - "GET /jobs/e811df3f75af4325a959c7926c39f017 HTTP/1.1" 200 OK
+Transcribing: buffer\incoming\6f6245e0805f487db96c91b3a394e335\da2.mp4
+INFO:     127.0.0.1:63992 - "GET /jobs/e811df3f75af4325a959c7926c39f017 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63992 - "GET /jobs/e811df3f75af4325a959c7926c39f017 HTTP/1.1" 200 OK
+OCR video: buffer\incoming\6f6245e0805f487db96c91b3a394e335\da2.mp4 (6 sampled frame(s))
+INFO:     127.0.0.1:63992 - "GET /jobs/e811df3f75af4325a959c7926c39f017 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63992 - "GET /jobs/e811df3f75af4325a959c7926c39f017 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63992 - "GET /jobs/e811df3f75af4325a959c7926c39f017 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63992 - "GET /jobs/e811df3f75af4325a959c7926c39f017 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63992 - "GET /jobs/e811df3f75af4325a959c7926c39f017 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63992 - "GET /jobs/e811df3f75af4325a959c7926c39f017 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59576 - "GET /jobs/e811df3f75af4325a959c7926c39f017 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59576 - "GET /jobs/e811df3f75af4325a959c7926c39f017 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59576 - "GET /jobs/e811df3f75af4325a959c7926c39f017 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59576 - "GET /jobs/e811df3f75af4325a959c7926c39f017/explanations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59576 - "GET /priority-list HTTP/1.1" 200 OK

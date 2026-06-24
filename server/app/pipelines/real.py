@@ -37,14 +37,14 @@ def _term_attrs(pairs: list[list]) -> list[Attribution]:
     return [Attribution(feature=term, value=contribution, weight=contribution) for term, contribution in pairs]
 
 
-class WhisperKeywordTriage:
-    """Easy classifier: video -> Whisper transcript -> Russian scam keyword score.
+class SemanticPriorityPipeline:
+    """Fast priority signal: caption text -> scam vocabulary/embedding alignment.
 
-    Falls back to scoring the post caption (``ctx.description``) when Whisper is
-    unavailable, so triage still yields a priority signal.
+    This intentionally runs before OCR/CLIP/audio. It uses the same scam lexicons
+    as the audio and OCR systems, but does not decode the video.
     """
 
-    name = "triage_whisper_keyword"
+    name = "semantic_priority"
     modality = "triage"
     whole_video = True
 
@@ -52,98 +52,80 @@ class WhisperKeywordTriage:
         self._m = models
 
     async def process(self, ctx: JobContext, unit: Unit) -> list[Finding]:
-        if self._m.keyword_detector is None:
-            return []
-        result = await asyncio.to_thread(self._classify, ctx)
-        if result is None:
-            return []
-        probability, matched = result
-        return [
-            Finding(
-                modality="triage",
-                signal_type=f"speech_scam:{_top_term(matched)}",
-                confidence=float(probability),
-                evidence={"source": "whisper" if self._m.whisper else "caption"},  # "top_terms": _term_pairs(matched),
-            )
-        ]
-
-    def _classify(self, ctx: JobContext):
-        import audio_detect as ad
-
-        video_path = _video_path(ctx)
-        transcript = None
-        if self._m.whisper is not None and video_path is not None:
-            try:
-                transcript = self._m.whisper.transcribe(video_path, self._m.transcripts_dir, force=False)
-            except Exception:
-                transcript = None  # no speech / decode error -> fall back to caption text
-        if transcript is None:
-            text = (ctx.description or "").strip()
-            if not text:
-                return None
-            transcript = ad.Transcript(video_path=Path("<caption>"), text_path=Path("<none>"), text=text)
-        try:
-            result = self._m.keyword_detector.classify(transcript)
-        except ValueError:
-            return None
-        return result.scam_probability, result.matched_terms
-
-    async def explain(self, ctx: JobContext, findings: list[Finding]) -> Explanation | None:
-        if not findings:
-            return None
-        return Explanation(
-            scope="triage",
-            method="keyword",
-            attributions=_term_attrs(findings[0].evidence.get("top_terms", [])),
-            summary=f"speech scam probability {findings[0].confidence:.2f}",
-        )
-
-
-class CaptionTextPipeline:
-    """Score the post caption/description text with the scam keyword detector."""
-
-    name = "caption_text"
-    modality = "text"
-    whole_video = True
-
-    def __init__(self, models: Models) -> None:
-        self._m = models
-
-    async def process(self, ctx: JobContext, unit: Unit) -> list[Finding]:
-        if self._m.keyword_detector is None:
-            return []
         text = (ctx.description or "").strip()
         if not text:
             return []
-        result = await asyncio.to_thread(self._run, text)
+        result = await asyncio.to_thread(self._classify, text)
         if result is None:
             return []
+        confidence, evidence = result
         return [
             Finding(
-                modality="text",
-                signal_type=f"caption_scam:{_top_term(result.matched_terms)}",
-                confidence=float(result.scam_probability),
-                evidence={},  # "top_terms": _term_pairs(result.matched_terms),
+                modality="triage",
+                signal_type="semantic_scam_alignment",
+                confidence=float(confidence),
+                evidence=evidence,
             )
         ]
 
-    def _run(self, text: str):
+    def _classify(self, text: str):
         import audio_detect as ad
+        import scam_image_detector as sid
 
-        transcript = ad.Transcript(video_path=Path("<caption>"), text_path=Path("<none>"), text=text)
-        try:
-            return self._m.keyword_detector.classify(transcript)
-        except ValueError:
-            return None
+        keyword_probability = 0.0
+        keyword_terms: list[list] = []
+        if self._m.keyword_detector is not None:
+            transcript = ad.Transcript(video_path=Path("<caption>"), text_path=Path("<none>"), text=text)
+            try:
+                keyword_result = self._m.keyword_detector.classify(transcript)
+                keyword_probability = float(keyword_result.scam_probability)
+                keyword_terms = _term_pairs(keyword_result.matched_terms)
+            except ValueError:
+                pass
+
+        semantic_probability = 0.0
+        semantic_terms: list[list] = []
+        scam_similarity = 0.0
+        clean_similarity = 0.0
+        normalized_text = ""
+        if self._m.visual_embed is not None:
+            ocr_like_text = sid.normalize_text(text)
+            normalized_text = ocr_like_text
+            ocr = sid.OcrResult(
+                source_path=Path("<caption>"),
+                text_path=Path("<none>"),
+                text=ocr_like_text,
+                frame_count=0,
+            )
+            semantic_result = self._m.visual_embed.classify(ocr)
+            semantic_probability = float(semantic_result.scam_probability)
+            semantic_terms = _term_pairs(semantic_result.matched_terms)
+            scam_similarity = float(semantic_result.scam_similarity)
+            clean_similarity = float(semantic_result.clean_similarity)
+
+        confidence = max(keyword_probability, semantic_probability)
+        evidence = {
+            "source": "description",
+            "keyword_probability": keyword_probability,
+            "semantic_probability": semantic_probability,
+            "scam_similarity": scam_similarity,
+            "clean_similarity": clean_similarity,
+            "keyword_top_terms": keyword_terms,
+            "semantic_top_terms": semantic_terms,
+            "normalized_excerpt": normalized_text[:300],
+        }
+        return confidence, evidence
 
     async def explain(self, ctx: JobContext, findings: list[Finding]) -> Explanation | None:
         if not findings:
             return None
+        evidence = findings[0].evidence
+        attrs = _term_attrs(evidence.get("semantic_top_terms", []) or evidence.get("keyword_top_terms", []))
         return Explanation(
-            scope="text",
-            method="keyword",
-            attributions=_term_attrs(findings[0].evidence.get("top_terms", [])),
-            summary=f"caption scam probability {findings[0].confidence:.2f}",
+            scope="semantic_priority",
+            method="lexicon_embedding_alignment",
+            attributions=attrs,
+            summary=f"semantic priority score {findings[0].confidence:.2f}",
         )
 
 
@@ -171,7 +153,7 @@ class AudioScamPipeline:
                 modality="audio",
                 signal_type=f"audio_scam:{_top_term(result.matched_terms)}",
                 confidence=float(result.scam_probability),
-                evidence={},  # "top_terms": _term_pairs(result.matched_terms),
+                evidence={"top_terms": _term_pairs(result.matched_terms)},
             )
         ]
 
@@ -322,8 +304,7 @@ class CasinoClipPipeline:
 def build_real_registry(models: Models) -> PipelineRegistry:
     """Register the real model-backed pipelines (each no-ops if its model is absent)."""
     registry = PipelineRegistry()
-    registry.register(WhisperKeywordTriage(models))
-    registry.register(CaptionTextPipeline(models))
+    registry.register(SemanticPriorityPipeline(models))
     registry.register(AudioScamPipeline(models))
     registry.register(OcrScamPipeline(models))
     registry.register(CasinoClipPipeline(models))
