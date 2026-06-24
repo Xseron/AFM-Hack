@@ -1,0 +1,12 @@
+# source: C:\David\Programming\hakaton\server\buffer\incoming\d074eae0fcad4030a6796e9c5d1396f4\DYQ38VlAHF2.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Мы должны идти.
+Сейчас.
+Владимир.
+О, Дон.
+Что ты делаешь?
+Нет.
+Я не знал, что это было.

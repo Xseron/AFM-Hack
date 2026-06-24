@@ -1,0 +1,6 @@
+# source: C:\David\Programming\hakaton\server\buffer\incoming\7cb552991fa84b919f2799f9e54c89fb\DZEpM_htZI5.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Чувствую, что вся, зажечь, огни земли, зажечь их под баром

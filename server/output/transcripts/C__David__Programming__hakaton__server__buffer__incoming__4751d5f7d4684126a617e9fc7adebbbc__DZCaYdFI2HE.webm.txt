@@ -1,0 +1,6 @@
+# source: C:\David\Programming\hakaton\server\buffer\incoming\4751d5f7d4684126a617e9fc7adebbbc\DZCaYdFI2HE.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Хи-Ха-Ха-Ха-Ха-Ха-Ха-Ха-Ха,

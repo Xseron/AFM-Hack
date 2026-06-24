@@ -1,0 +1,7 @@
+# source: C:\David\Programming\hakaton\server\buffer\incoming\ce43367f2e7b424b8ef67494015a1a81\DZXPkp5M3Ba.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Шабла Африя, вирока, кюпачту, но тюки тапки.
+Эхи! Папа, ма, занки!

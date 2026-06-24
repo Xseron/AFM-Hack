@@ -1,0 +1,7 @@
+# source: C:\David\Programming\hakaton\server\buffer\incoming\ce9ccdc2b9ba4ad3b1764225f8b6117b\da2.mp4
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Ты understand everything
+You see it plainly

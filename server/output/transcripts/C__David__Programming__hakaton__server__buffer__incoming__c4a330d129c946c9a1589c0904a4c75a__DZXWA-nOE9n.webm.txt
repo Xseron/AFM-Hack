@@ -1,0 +1,11 @@
+# source: C:\David\Programming\hakaton\server\buffer\incoming\c4a330d129c946c9a1589c0904a4c75a\DZXWA-nOE9n.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Ты хорошо.
+Что-то что-то.
+Потому что нет проблем.
+Спасибо за просмотр.
+Я не знаю.
+Смотрите.

@@ -1,0 +1,6 @@
+# source: C:\David\Programming\hakaton\server\buffer\incoming\311897e17318414e90976e3eb2ddc3fa\DW3yNQIDT_1.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+БОТИ БОТИ БОТИ БОТИ!

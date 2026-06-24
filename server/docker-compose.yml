@@ -1,0 +1,57 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api:
+    build: .
+    environment:
+      MW_QUEUE_BACKEND: redis
+      MW_REDIS_URL: redis://redis:6379/0
+      MW_DATABASE_URL: sqlite+aiosqlite:////data/media_watch.db
+      MW_STORAGE_DIR: /data/buffer
+    volumes:
+      - app-data:/data
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+
+  triage-worker:
+    build: .
+    command: ["python", "-m", "app.worker.triage"]
+    environment:
+      MW_QUEUE_BACKEND: redis
+      MW_REDIS_URL: redis://redis:6379/0
+      MW_DATABASE_URL: sqlite+aiosqlite:////data/media_watch.db
+      MW_STORAGE_DIR: /data/buffer
+    volumes:
+      - app-data:/data
+    depends_on:
+      - redis
+
+  analysis-worker:
+    build: .
+    command: ["python", "-m", "app.worker.analysis"]
+    environment:
+      MW_QUEUE_BACKEND: redis
+      MW_REDIS_URL: redis://redis:6379/0
+      MW_DATABASE_URL: sqlite+aiosqlite:////data/media_watch.db
+      MW_STORAGE_DIR: /data/buffer
+    volumes:
+      - app-data:/data
+    depends_on:
+      - redis
+
+# Later, for multiple machines / durability, swap SQLite for Postgres:
+#   postgres:
+#     image: postgres:16-alpine
+#     environment:
+#       POSTGRES_PASSWORD: mw
+#     ports: ["5432:5432"]
+#   then set MW_DATABASE_URL=postgresql+asyncpg://postgres:mw@postgres/postgres
+#   (add asyncpg to dependencies)
+
+volumes:
+  app-data:

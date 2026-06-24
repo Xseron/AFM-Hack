@@ -1,0 +1,46 @@
+[project]
+name = "ai-media-watch"
+version = "0.1.0"
+description = "AI Media Watch backend skeleton"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "sqlalchemy[asyncio]>=2.0",
+    "aiosqlite>=0.20",
+    "redis>=5.0",
+    "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",
+]
+# Real ML pipelines (MW_MODELS_ENABLED=true). Heavy — install only when needed.
+models = [
+    "faster-whisper>=1.0",
+    "torch>=2.2",
+    "transformers>=4.40",
+    "sentence-transformers>=2.7",
+    "scikit-learn>=1.4",
+    "opencv-python>=4.9",
+    "pillow>=10.0",
+    "rapidocr-onnxruntime>=1.3",
+    "onnxruntime>=1.17",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]

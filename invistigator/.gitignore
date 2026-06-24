@@ -1,0 +1,9 @@
+.env
+*.session
+*.session-journal
+media/
+*.csv
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/

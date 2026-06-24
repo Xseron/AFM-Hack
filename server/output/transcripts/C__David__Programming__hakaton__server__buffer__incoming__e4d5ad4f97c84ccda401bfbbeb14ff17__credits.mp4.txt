@@ -1,0 +1,9 @@
+# source: C:\David\Programming\hakaton\server\buffer\incoming\e4d5ad4f97c84ccda401bfbbeb14ff17\credits.mp4
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Уже 47 человек погасили свои кредиты благодаря мне.
+Если тебе нужно погасить кредит, напиши сумму в комментариях,
+возможно кто-то другой погасит твой кредит, а я выберу следующий
+10 человек, и твой кредит будет погашен уже сегодня.

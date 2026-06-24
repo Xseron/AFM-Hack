@@ -1,0 +1,6 @@
+# source: C:\David\Programming\hakaton\server\buffer\incoming\e9f5b28f87bf4e5da38dc0d5c6ab3c33\DZFrXRZspiT.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Редактор субтитров А.Синецкая Корректор А.Егорова

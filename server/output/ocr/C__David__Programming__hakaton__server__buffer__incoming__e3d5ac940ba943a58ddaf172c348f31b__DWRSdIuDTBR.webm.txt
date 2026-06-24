@@ -1,0 +1,6 @@
+# source: C:\David\Programming\hakaton\server\buffer\incoming\e3d5ac940ba943a58ddaf172c348f31b\DWRSdIuDTBR.webm
+# frames_ocrd: 2
+
+o KOHLa
+o KoHLIa
+GGO

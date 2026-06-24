@@ -1,0 +1,4 @@
+# source: C:\David\Programming\hakaton\server\buffer\incoming\6416bb7a84ad4ac4833f74b13628d6ef\DZuiFqUAgaf.webm
+# frames_ocrd: 1
+
+
