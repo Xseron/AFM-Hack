@@ -11,7 +11,7 @@ from app.config import Settings, get_settings
 from app.db.repository import JobRepository
 from app.db.session import init_db, make_engine, make_sessionmaker
 from app.dedup.neardup import NearDupIndex, NullNearDupIndex
-from app.parser_control import ParserController
+from app.parser_control import AutoScanState, ParserController
 from app.pipelines.extract import Extractor, StubExtractor
 from app.pipelines.registry import PipelineRegistry
 from app.pipelines.stubs import build_registry
@@ -31,6 +31,7 @@ class Components:
     extractor: Extractor
     neardup: NearDupIndex
     parser: ParserController
+    auto_scan: AutoScanState
     models: object | None = None
 
 
@@ -64,6 +65,16 @@ def build_components(settings: Settings) -> Components:
             parser_dir=settings.parser_dir,
             server_url=settings.parser_server_url,
         ),
+        auto_scan=AutoScanState(
+            enabled=settings.auto_scan_enabled,
+            max_reels=settings.auto_scan_max_reels,
+            thresholds={
+                "semantic": settings.auto_scan_threshold_semantic,
+                "ocr": settings.auto_scan_threshold_ocr,
+                "clip": settings.auto_scan_threshold_clip,
+                "audio": settings.auto_scan_threshold_audio,
+            },
+        ),
         models=models,
     )
 
@@ -86,7 +97,13 @@ def _start_inline_workers(components: Components) -> list[asyncio.Task]:
     analysis = Worker(
         components.queue,
         ANALYSIS,
-        make_analysis_handler(components.repo, components.registry, components.extractor),
+        make_analysis_handler(
+            components.repo,
+            components.registry,
+            components.extractor,
+            controller=components.parser,
+            auto_scan=components.auto_scan,
+        ),
     )
     return [
         asyncio.create_task(triage.run_forever()),

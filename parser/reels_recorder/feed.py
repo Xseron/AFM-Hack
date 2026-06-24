@@ -174,20 +174,69 @@ def find_follow(page: Page, cfg: Config) -> Locator | None:
     return None
 
 
-def channel_reels_url(url: str) -> str:
-    """Normalize any profile/channel link into its Reels tab URL."""
+# The author's handle = the profile link closest to the active reel's video. We
+# climb a bounded number of levels from the video (the header sits a few levels
+# up) so we find the reel's own author before reaching related reels or the nav.
+_AUTHOR_JS = r"""
+() => {
+  const BAD = new Set(['reel','reels','explore','p','tv','stories','accounts',
+    'about','directory','direct','locations']);
+  const handleOf = (href) => {
+    const m = (href || '').match(/^\/([A-Za-z0-9._]+)(?:\/|$)/);
+    return (m && !BAD.has(m[1])) ? m[1] : null;
+  };
+  const visArea = (el) => { const r = el.getBoundingClientRect();
+    const w = Math.min(r.right, innerWidth) - Math.max(r.left, 0);
+    const h = Math.min(r.bottom, innerHeight) - Math.max(r.top, 0);
+    return Math.max(0, w) * Math.max(0, h); };
+  const vids = Array.from(document.querySelectorAll('video'));
+  if (!vids.length) return '';
+  const v = vids.slice().sort((a, b) => visArea(b) - visArea(a))[0];
+  // Climb until we reach an ancestor that actually holds a profile link (the
+  // header may be in a sibling column that only joins the video high up). The
+  // first profile link in that ancestor, in DOM order, is the reel's author
+  // (comes before comments / related reels). Nav links are skipped.
+  let el = v;
+  for (let i = 0; i < 15 && el; i++, el = el.parentElement) {
+    for (const a of el.querySelectorAll('a[href^="/"]')) {
+      if (a.closest('nav')) continue;
+      const h = handleOf(a.getAttribute('href'));
+      if (h) return h;
+    }
+  }
+  return '';
+}
+"""
+
+
+def author(page: Page) -> str:
+    """Handle of the active reel's author (empty if it can't be read)."""
+    try:
+        return (page.evaluate(_AUTHOR_JS) or "").strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def channel_handle(url: str) -> str:
+    """The bare username for a profile/channel link (lowercased)."""
     u = (url or "").strip()
     m = re.search(r"instagram\.com/([A-Za-z0-9._]+)", u)
     user = m.group(1) if m else u.strip("/@ ")
-    return f"https://www.instagram.com/{user}/reels/"
+    return user.lower()
+
+
+def channel_reels_url(url: str) -> str:
+    """Normalize any profile/channel link into its Reels tab URL."""
+    return f"https://www.instagram.com/{channel_handle(url)}/reels/"
 
 
 def channel_shortcodes(page: Page) -> list[str]:
-    """Reel shortcodes currently present in the profile's Reels grid, in order."""
+    """Reel shortcodes from the profile's Reels grid, in order (scoped to <main>)."""
     js = """
     () => {
+      const root = document.querySelector('main') || document.body;
       const out = [], seen = new Set();
-      for (const a of document.querySelectorAll('a[href]')) {
+      for (const a of root.querySelectorAll('a[href]')) {
         const m = (a.getAttribute('href') || '').match(/\\/reel\\/([A-Za-z0-9_-]+)/);
         if (m && !seen.has(m[1])) { seen.add(m[1]); out.push(m[1]); }
       }
@@ -201,7 +250,7 @@ def channel_shortcodes(page: Page) -> list[str]:
 
 
 def scroll_window(page: Page) -> None:
-    """Scroll the page (the profile grid) down to lazy-load more reels."""
+    """Scroll the profile grid page down to lazy-load more reels."""
     try:
         page.evaluate("() => window.scrollBy(0, window.innerHeight * 0.9)")
     except Exception:  # noqa: BLE001

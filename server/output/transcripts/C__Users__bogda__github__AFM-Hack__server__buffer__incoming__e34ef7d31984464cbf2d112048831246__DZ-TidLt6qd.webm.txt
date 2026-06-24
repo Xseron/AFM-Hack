@@ -1,0 +1,7 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\e34ef7d31984464cbf2d112048831246\DZ-TidLt6qd.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+получила от меня 100 тысяч долларов. Теперь все вопросы будут решены. А что
+если на твою карту, случайно, прилетит 100 тысяч...

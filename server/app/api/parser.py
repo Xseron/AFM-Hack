@@ -14,6 +14,16 @@ class StartRequest(BaseModel):
     max_reels: int | None = None
 
 
+class ReelRequest(BaseModel):
+    reel_url: str
+
+
+class AutoScanRequest(BaseModel):
+    enabled: bool | None = None
+    thresholds: dict[str, float] | None = None
+    max_reels: int | None = None
+
+
 @router.post("/start")
 async def start_parser(body: StartRequest, components=Depends(get_components)) -> dict:
     url = (body.channel_url or "").strip()
@@ -30,6 +40,19 @@ async def start_parser(body: StartRequest, components=Depends(get_components)) -
         raise HTTPException(status_code=422, detail=str(e)) from e
 
 
+@router.post("/reel")
+async def check_reel(body: ReelRequest, components=Depends(get_components)) -> dict:
+    url = (body.reel_url or "").strip()
+    if "/reel" not in url:
+        raise HTTPException(status_code=422, detail="expected an Instagram reel URL")
+    try:
+        return components.parser.start_reel(url)
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+
 @router.post("/stop")
 async def stop_parser(components=Depends(get_components)) -> dict:
     return components.parser.stop()
@@ -38,3 +61,22 @@ async def stop_parser(components=Depends(get_components)) -> dict:
 @router.get("/status")
 async def parser_status(components=Depends(get_components)) -> dict:
     return components.parser.status()
+
+
+@router.get("/auto-scan")
+async def get_auto_scan(components=Depends(get_components)) -> dict:
+    return components.auto_scan.as_dict()
+
+
+@router.post("/auto-scan")
+async def set_auto_scan(body: AutoScanRequest, components=Depends(get_components)) -> dict:
+    state = components.auto_scan
+    if body.enabled is not None:
+        state.enabled = body.enabled
+    if body.thresholds:
+        for checker, value in body.thresholds.items():
+            if checker in state.thresholds:
+                state.thresholds[checker] = max(0.0, min(1.0, float(value)))
+    if body.max_reels is not None and body.max_reels > 0:
+        state.max_reels = body.max_reels
+    return state.as_dict()

@@ -1,0 +1,7 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\17a026c2c39241de9127fa95632893e6\DYSHIaysl-j.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Только денег тебе нужно, чтобы закрыть все твои жизненные
+проблемы.

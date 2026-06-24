@@ -1,0 +1,9 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\705bfd8fd63f439aa484c7c0bf9cb16e\DZqBrACtYCL.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+на карту тебе случайным образом прилетело 100 тысяч долларов,
+расскажи на что ты именно в первую очередь потратишь.
+Если твоя идея мне понравится, возможно, произойдет
+сюда.

@@ -30,6 +30,8 @@ class Config:
     max_reels: int | None = None
     # When set, parse reels from this profile/channel instead of the global feed.
     channel_url: str = ""
+    # When set, parse exactly this one reel and exit.
+    reel_url: str = ""
     instagram_username: str = ""
     instagram_password: str = ""
     auto_login: bool = False
@@ -102,6 +104,8 @@ def parse_args(argv: list[str] | None = None) -> Config:
                    help="Stop after recording this many new reels (for testing).")
     p.add_argument("--channel", dest="channel_url", default=os.getenv("REELS_CHANNEL", ""),
                    help="Parse reels from this profile/channel URL instead of the global feed.")
+    p.add_argument("--reel", dest="reel_url", default=os.getenv("REELS_REEL", ""),
+                   help="Parse exactly this one reel URL and exit.")
     p.add_argument("--auto-login", action="store_true", default=_env_bool("INSTAGRAM_AUTO_LOGIN"),
                    help="Try to log in using INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD from .env.")
     a = p.parse_args(argv)
@@ -112,6 +116,7 @@ def parse_args(argv: list[str] | None = None) -> Config:
         out_dir=a.out_dir,
         max_reels=a.max_reels,
         channel_url=a.channel_url.strip(),
+        reel_url=a.reel_url.strip(),
         instagram_username=os.getenv("INSTAGRAM_USERNAME", ""),
         instagram_password=os.getenv("INSTAGRAM_PASSWORD", ""),
         auto_login=a.auto_login,

@@ -1,0 +1,6 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\b72777cff6e548fd9e49a065321cc271\DYnaEe3AKKe.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Тебе бабея, да, эмммм!

@@ -1,0 +1,6 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\23d83c1515544266baecd5c4b99444b3\DZpyHujNXDk.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Твой сбок будет рядом с твоими планами

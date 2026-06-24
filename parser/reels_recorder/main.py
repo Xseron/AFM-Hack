@@ -42,6 +42,10 @@ def _handle_reel(page: Page, cfg: Config, client: ServerClient, code: str) -> No
         "permalink": permalink,
     }
     cap = feed.caption(page, code)
+    handle = feed.author(page)
+    if handle:
+        meta["author"] = handle
+        meta["channel_url"] = f"https://www.instagram.com/{handle}/"
 
     recorder.install(page)
     if not recorder.start_recording(page):
@@ -72,61 +76,97 @@ def _handle_reel(page: Page, cfg: Config, client: ServerClient, code: str) -> No
 
 def _collect_channel_codes(page: Page, cfg: Config) -> list[str]:
     """Scroll the profile's Reels grid and gather shortcodes (capped by max_reels)."""
-    target = cfg.max_reels or 60
+    target = (cfg.max_reels or 30) * 2  # over-collect: some grid items are collabs we skip
     codes: list[str] = []
     seen_local: set[str] = set()
     stagnant = 0
     while len(codes) < target:
+        before = len(codes)
         for c in feed.channel_shortcodes(page):
             if c not in seen_local:
                 seen_local.add(c)
                 codes.append(c)
         if len(codes) >= target:
             break
-        before = len(codes)
         feed.scroll_window(page)
         page.wait_for_timeout(1500)
-        for c in feed.channel_shortcodes(page):
-            if c not in seen_local:
-                seen_local.add(c)
-                codes.append(c)
         if len(codes) <= before:
             stagnant += 1
             if stagnant >= 3:
                 break
         else:
             stagnant = 0
-    return codes[:target]
+    return codes
 
 
 def _run_channel(page: Page, cfg: Config, client: ServerClient, seen: SeenStore) -> None:
-    """Parse reels from a single profile/channel instead of the global feed."""
+    """Parse reels from a single profile/channel (never the global feed).
+
+    Open the channel's Reels tab, read its reel grid, then open each reel and
+    record it — but only if it actually belongs to this channel. Instagram mixes
+    brand-collab / tagged reels (authored by another account) into the grid, so
+    we verify each reel's author and skip foreign ones; a run of foreign reels
+    means we've passed the channel's own reels, so we stop. Capped at N.
+    """
+    handle = feed.channel_handle(cfg.channel_url)
     reels_url = feed.channel_reels_url(cfg.channel_url)
     print(f"[channel] opening {reels_url}")
     page.goto(reels_url, wait_until="domcontentloaded")
     page.wait_for_timeout(2000)
 
     codes = _collect_channel_codes(page, cfg)
-    print(f"[channel] found {len(codes)} reel(s)")
+    print(f"[channel] found {len(codes)} reel(s) in @{handle}'s grid")
 
+    target = cfg.max_reels or 30
     recorded = 0
+    foreign_streak = 0
     for code in codes:
+        if recorded >= target:
+            print(f"[done] reached max reels = {target}")
+            break
         if seen.has(code):
             continue
-        seen.add(code)
         try:
             page.goto(f"https://www.instagram.com/reel/{code}/", wait_until="domcontentloaded")
             page.wait_for_timeout(1500)
         except Exception as e:  # noqa: BLE001
             print(f"[warn] could not open {code}: {e}")
             continue
+        seen.add(code)
+        reel_author = feed.author(page)
+        if handle and reel_author and reel_author.lower() != handle:
+            print(f"[skip] {code} is by @{reel_author}, not @{handle}")
+            foreign_streak += 1
+            if foreign_streak >= 5:
+                print(f"[channel] past @{handle}'s own reels; stopping")
+                break
+            continue
+        foreign_streak = 0
         _handle_reel(page, cfg, client, code)
         recorded += 1
-        if cfg.max_reels and recorded >= cfg.max_reels:
-            print(f"[done] reached --max-reels={cfg.max_reels}")
-            break
         humanize.sleep_range(cfg.inter_reel_delay)
     print(f"[done] channel parsed: {recorded} reel(s) recorded")
+
+
+def _run_single_reel(page: Page, cfg: Config, client: ServerClient, seen: SeenStore) -> None:
+    """Parse exactly one reel given its URL, then return."""
+    url = cfg.reel_url.strip()
+    m = feed._SHORTCODE_RE.search(url)
+    code = m.group(1) if m else None
+    if not code:
+        print(f"[error] could not read a reel shortcode from {url!r}")
+        return
+    reel_url = f"https://www.instagram.com/reel/{code}/"
+    print(f"[reel] opening {reel_url}")
+    try:
+        page.goto(reel_url, wait_until="domcontentloaded")
+        page.wait_for_timeout(1500)
+    except Exception as e:  # noqa: BLE001
+        print(f"[error] could not open {code}: {e}")
+        return
+    seen.add(code)
+    _handle_reel(page, cfg, client, code)
+    print(f"[done] reel parsed: {code}")
 
 
 def _save_local(cfg: Config, code: str, clip: bytes) -> None:
@@ -157,13 +197,17 @@ def run(cfg: Config) -> int:
             return 3
         browser.save_session(context, cfg)
 
+        mode = "DEBUG" if cfg.debug else "LIVE"
+        if cfg.reel_url:
+            print(f"[{mode}] parsing single reel {cfg.reel_url}. server={cfg.server_url}  out={cfg.out_dir}")
+            _run_single_reel(page, cfg, client, seen)
+            return 0
+
         if cfg.channel_url:
-            mode = "DEBUG" if cfg.debug else "LIVE"
             print(f"[{mode}] parsing channel {cfg.channel_url}. server={cfg.server_url}  out={cfg.out_dir}")
             _run_channel(page, cfg, client, seen)
             return 0
 
-        mode = "DEBUG" if cfg.debug else "LIVE"
         print(f"[{mode}] watching Reels. server={cfg.server_url}  out={cfg.out_dir}")
 
         recorded = 0

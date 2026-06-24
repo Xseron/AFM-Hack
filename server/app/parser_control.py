@@ -14,7 +14,33 @@ import subprocess
 import sys
 import threading
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
+
+
+# The video checkers a reel is scored on; each gets its own scam threshold.
+CHECKERS = ("semantic", "ocr", "clip", "audio")
+
+
+@dataclass
+class AutoScanState:
+    """Runtime toggle: when enabled, a scam reel auto-triggers a full channel scan.
+
+    A reel counts as scam when *any* checker's confidence reaches that checker's
+    own threshold (each independently configurable from the UI).
+    """
+    enabled: bool = False
+    thresholds: dict = field(default_factory=lambda: {c: 0.7 for c in CHECKERS})
+    max_reels: int = 20           # cap per auto-triggered channel scan
+    scanned: set = field(default_factory=set)  # channels already auto-scanned this run
+
+    def as_dict(self) -> dict:
+        return {
+            "enabled": self.enabled,
+            "thresholds": {c: self.thresholds.get(c, 1.0) for c in CHECKERS},
+            "max_reels": self.max_reels,
+            "scanned_count": len(self.scanned),
+        }
 
 
 def _default_parser_dir() -> str:
@@ -36,20 +62,26 @@ class ParserController:
         channel_url = (channel_url or "").strip()
         if not channel_url:
             raise ValueError("channel_url must not be empty")
+        return self._spawn(["--channel", channel_url], channel_url, max_reels=max_reels)
+
+    def start_reel(self, reel_url: str) -> dict:
+        reel_url = (reel_url or "").strip()
+        if not reel_url:
+            raise ValueError("reel_url must not be empty")
+        return self._spawn(["--reel", reel_url], reel_url)
+
+    def _spawn(self, mode_args: list[str], label: str, max_reels: int | None = None) -> dict:
         with self._lock:
             if self._is_running():
                 raise RuntimeError("parser is already running; stop it first")
 
-            cmd = [
-                sys.executable, "-u", "-m", "reels_recorder",
-                "--channel", channel_url,
-                "--server-url", self._server_url,
-            ]
+            cmd = [sys.executable, "-u", "-m", "reels_recorder",
+                   "--server-url", self._server_url, *mode_args]
             if max_reels:
                 cmd += ["--max-reels", str(max_reels)]
 
             log = open(self._log_path, "ab", buffering=0)
-            log.write(f"\n=== start {channel_url} @ {time.ctime()} ===\n".encode("utf-8"))
+            log.write(f"\n=== start {label} @ {time.ctime()} ===\n".encode("utf-8"))
             creationflags = 0
             preexec_fn = None
             if os.name == "nt":
@@ -66,7 +98,7 @@ class ParserController:
                 creationflags=creationflags,
                 preexec_fn=preexec_fn,
             )
-            self._channel = channel_url
+            self._channel = label
             self._started_at = time.time()
             return self.status()
 

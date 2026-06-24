@@ -1,0 +1,6 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\ef97d8ac2ded49feb5685a21780bf7f3\DZuPSpht3PE.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Но, время до начала мы сняли и находили этот лес, и мы сняли это.

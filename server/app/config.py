@@ -35,6 +35,15 @@ class Settings(BaseSettings):
     parser_dir: str = ""
     parser_server_url: str = "http://localhost:8000"
     parser_max_reels: int = 30
+    # Auto-investigate: when a reel is flagged scam (any checker >= threshold),
+    # automatically scan its whole channel (up to max). Toggled live from the UI.
+    auto_scan_enabled: bool = False
+    auto_scan_max_reels: int = 20
+    # Per-checker scam thresholds (any one reaching its value triggers a scan).
+    auto_scan_threshold_semantic: float = 0.7
+    auto_scan_threshold_ocr: float = 0.7
+    auto_scan_threshold_clip: float = 0.7
+    auto_scan_threshold_audio: float = 0.7
 
     @property
     def enabled_pipeline_list(self) -> list[str]:

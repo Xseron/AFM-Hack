@@ -1,0 +1,6 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\832fcb51e22945fdb28e9af71f9d6423\DZpiTHcNb2c.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Постоянно читали, что женщины живут дольше мужчин.

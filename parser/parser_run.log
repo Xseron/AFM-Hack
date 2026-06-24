@@ -12,3 +12,55 @@
 [sent] DZ-NO4rK1Ex (800 KB)
 [sent] DZ-JhPuqVn- (748 KB)
 [sent] DZ9unn3IgZE (794 KB)
+
+=== start https://www.instagram.com/maleo.prime/ @ Thu Jun 25 04:03:49 2026 ===
+[LIVE] parsing channel https://www.instagram.com/maleo.prime/. server=http://localhost:8000  out=recordings
+[channel] opening https://www.instagram.com/maleo.prime/reels/
+[channel] found 20 reel(s)
+[warn] empty clip for DZ-EM3Msjsq (stream may be CORS-tainted); skipped upload
+[warn] could not start recording for DZ9meXbM_yM; skipping
+[sent] DZ5g48fMguQ (757 KB)
+[warn] upload failed for DZ1-IqVskkm: HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /videos (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x000001FC102D4910>: Failed to establish a new connection: [WinError 10061] Подключение не установлено, т.к. конечный компьютер отверг запрос на подключение'))
+[warn] upload failed for DZuwqoIMic0: HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /videos (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x000001FC10302A90>: Failed to establish a new connection: [WinError 10061] Подключение не установлено, т.к. конечный компьютер отверг запрос на подключение'))
+[warn] upload failed for DZuRW9iMXyb: HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /videos (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x000001FC1031B010>: Failed to establish a new connection: [WinError 10061] Подключение не установлено, т.к. конечный компьютер отверг запрос на подключение'))
+[warn] upload failed for DZsa-PJsifP: HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /videos (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x000001FC1032EA10>: Failed to establish a new connection: [WinError 10061] Подключение не установлено, т.к. конечный компьютер отверг запрос на подключение'))
+[warn] stop_recording failed: Page.evaluate: Target page, context or browser has been closed
+[warn] empty clip for DZr4dbSNdRG (stream may be CORS-tainted); skipped upload
+[warn] could not open DZru3AlMlua: Page.goto: Target page, context or browser has been closed
+[warn] could not open DZo0nuTMZOW: Page.goto: Target page, context or browser has been closed
+[warn] could not open DZiDWnOsGJe: Page.goto: Target page, context or browser has been closed
+[warn] could not open DZhxMKXMluH: Page.goto: Target page, context or browser has been closed
+[warn] could not open DZCbE4DstYq: Page.goto: Target page, context or browser has been closed
+[warn] could not open DZfFty7MOTL: Page.goto: Target page, context or browser has been closed
+[warn] could not open DZfD39BsyRB: Page.goto: Target page, context or browser has been closed
+[warn] could not open DZaBh2fM8mR: Page.goto: Target page, context or browser has been closed
+[warn] could not open DZW_oVDsiV-: Page.goto: Target page, context or browser has been closed
+[warn] could not open DZU0B2-KAuj: Page.goto: Target page, context or browser has been closed
+[warn] could not open DZUxuQ4qOb-: Page.goto: Target page, context or browser has been closed
+[warn] could not open DZUwUZeKtIa: Page.goto: Target page, context or browser has been closed
+[done] channel parsed: 8 reel(s) recorded
+
+=== start https://www.instagram.com/r4domir/ @ Thu Jun 25 04:15:40 2026 ===
+[LIVE] parsing channel https://www.instagram.com/r4domir/. server=http://localhost:8000  out=recordings
+[channel] opening https://www.instagram.com/r4domir/reels/
+[channel] found 14 reel(s) for @r4domir
+[skip] DZslsy4onBa is by @akenflai, not @r4domir
+[sent] DZy_t8KI39a (14613 KB)
+
+=== start https://www.instagram.com/elnur_travel @ Thu Jun 25 04:17:21 2026 ===
+[LIVE] parsing channel https://www.instagram.com/elnur_travel. server=http://localhost:8000  out=recordings
+[channel] opening https://www.instagram.com/elnur_travel/reels/
+[channel] found 30 reel(s) for @elnur_travel
+[sent] DZ9kSdzt1uJ (737 KB)
+[sent] DZ5pQTVt0dk (512 KB)
+
+=== start https://www.instagram.com/elnur_travel/ @ Thu Jun 25 04:35:16 2026 ===
+[LIVE] parsing channel https://www.instagram.com/elnur_travel/. server=http://localhost:8000  out=recordings
+[channel] opening https://www.instagram.com/elnur_travel/reels/
+[channel] found 12 reel(s) in @elnur_travel's grid
+[sent] DZxKM9ctmut (1036 KB)
+[sent] DZxG1Z2N3wu (724 KB)
+[sent] DZuPSpht3PE (2766 KB)
+[sent] DZpiTHcNb2c (765 KB)
+[done] reached max reels = 4
+[done] channel parsed: 4 reel(s) recorded

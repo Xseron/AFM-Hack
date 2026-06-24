@@ -1,0 +1,6 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\2089bce0a8ec4be89d0cf1e7164e9777\DZhKMf8oq7U.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Сума, решить все твои проблемы сегодня, напиши в комментариях только честно и не забудь подписаться. Я выберу одного из вас.

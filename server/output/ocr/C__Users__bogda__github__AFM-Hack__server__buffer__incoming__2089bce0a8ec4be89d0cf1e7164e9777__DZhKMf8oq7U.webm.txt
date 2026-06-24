@@ -1,0 +1,4 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\2089bce0a8ec4be89d0cf1e7164e9777\DZhKMf8oq7U.webm
+# frames_ocrd: 1
+
+Kakaa

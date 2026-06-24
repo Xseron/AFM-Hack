@@ -1,0 +1,6 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\4c93756492ee4440a00796874f4bd43b\DZMRZunI6IH.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Дмитрий Броский, мастер и фахтищик...

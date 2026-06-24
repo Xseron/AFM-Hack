@@ -93,6 +93,19 @@ PAGE = """
       border: 1px solid var(--line);
     }
     button.secondary:hover { background: #e4e9f2; }
+    button.linkbtn {
+      background: none;
+      border: 0;
+      color: var(--accent);
+      padding: 0 2px;
+      min-height: 0;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    button.linkbtn:hover { background: none; text-decoration: underline; }
+    .show-more-row td { text-align: center; }
     .actions {
       display: flex;
       flex-wrap: wrap;
@@ -223,6 +236,46 @@ PAGE = """
     </section>
 
     <section>
+      <h2>Check a Reel</h2>
+      <p class="status">Record and check a single reel by its link.</p>
+      <form id="reelForm">
+        <div class="row">
+          <label>Reel URL
+            <input id="reelUrl" name="reel_url" placeholder="https://www.instagram.com/reel/XXXXXXXXXXX/">
+          </label>
+          <button id="checkReelBtn" type="submit">Check Reel</button>
+        </div>
+        <div id="reelStatus" class="status"></div>
+      </form>
+    </section>
+
+    <section>
+      <h2>Auto-Investigate Channels</h2>
+      <p class="status">When ON, if any checker scores a reel at or above its threshold, the bot automatically opens that reel's channel and scans its videos (up to the max). Set each checker's threshold (%) independently.</p>
+      <div class="actions">
+        <button id="autoScanBtn" type="button">Auto-scan: …</button>
+      </div>
+      <div class="confidence-grid">
+        <label>Semantic %
+          <input id="thSemantic" data-checker="semantic" type="number" min="0" max="100" step="1">
+        </label>
+        <label>OCR %
+          <input id="thOcr" data-checker="ocr" type="number" min="0" max="100" step="1">
+        </label>
+        <label>CLIP %
+          <input id="thClip" data-checker="clip" type="number" min="0" max="100" step="1">
+        </label>
+        <label>Audio %
+          <input id="thAudio" data-checker="audio" type="number" min="0" max="100" step="1">
+        </label>
+      </div>
+      <label>Max reels per channel
+        <input id="autoScanMax" type="number" min="1" step="1">
+      </label>
+      <div id="autoScanStatus" class="status"></div>
+    </section>
+
+    <section>
       <h2>Find Existing Result</h2>
       <div class="row">
         <label>Job ID
@@ -289,6 +342,15 @@ PAGE = """
   <script>
     const $ = (id) => document.getElementById(id);
     let pollTimer = null;
+
+    // How many rows each list shows before "Show more"; expanded description ids.
+    const PAGE_INIT = 5;
+    const PAGE_STEP = 10;
+    let priorityShown = PAGE_INIT;
+    let recentShown = PAGE_INIT;
+    let priorityItems = [];
+    let recentItems = [];
+    const expandedDesc = new Set();
 
     function setStatus(message, isError = false) {
       $("uploadStatus").textContent = message;
@@ -438,7 +500,7 @@ PAGE = """
       const el = $("parserStatus");
       if (s && s.running) {
         const since = s.started_at ? new Date(s.started_at * 1000).toLocaleTimeString() : "";
-        el.textContent = `Running — channel ${s.channel} (pid ${s.pid}${since ? ", since " + since : ""}).`;
+        el.textContent = `Running — ${s.channel} (pid ${s.pid}${since ? ", since " + since : ""}).`;
         el.className = "status warn";
         $("startParserBtn").disabled = true;
         $("stopParserBtn").disabled = false;
@@ -498,6 +560,99 @@ PAGE = """
       }
     });
 
+    $("reelForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const url = $("reelUrl").value.trim();
+      if (!url) { $("reelStatus").textContent = "Paste a reel URL."; return; }
+      $("checkReelBtn").disabled = true;
+      $("reelStatus").className = "status";
+      $("reelStatus").textContent = "Starting reel check...";
+      try {
+        const res = await fetch("/parser/reel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reel_url: url }),
+        });
+        if (!res.ok) {
+          const detail = await res.json().catch(() => ({}));
+          throw new Error(detail.detail || (await res.text()));
+        }
+        $("reelStatus").textContent = "Reel check started; it will appear in Recent Reels once analyzed.";
+        renderParserStatus(await res.json());
+      } catch (err) {
+        $("reelStatus").textContent = err.message || String(err);
+        $("reelStatus").className = "status risk";
+      } finally {
+        $("checkReelBtn").disabled = false;
+      }
+    });
+
+    let autoScan = { enabled: false, thresholds: {}, max_reels: 0 };
+    const TH_INPUTS = { semantic: "thSemantic", ocr: "thOcr", clip: "thClip", audio: "thAudio" };
+
+    function renderAutoScan() {
+      const b = $("autoScanBtn");
+      b.textContent = `Auto-scan: ${autoScan.enabled ? "ON" : "OFF"}`;
+      b.className = autoScan.enabled ? "" : "secondary";
+      const th = autoScan.thresholds || {};
+      // Don't clobber a field the user is editing.
+      for (const [checker, id] of Object.entries(TH_INPUTS)) {
+        const el = $(id);
+        if (el && document.activeElement !== el) el.value = Math.round((th[checker] ?? 0) * 100);
+      }
+      const maxEl = $("autoScanMax");
+      if (maxEl && document.activeElement !== maxEl) maxEl.value = autoScan.max_reels || "";
+    }
+
+    async function loadAutoScan() {
+      try {
+        const res = await fetch("/parser/auto-scan");
+        if (!res.ok) return;
+        autoScan = await res.json();
+        renderAutoScan();
+      } catch (_) {}
+    }
+
+    async function postAutoScan(body) {
+      const res = await fetch("/parser/auto-scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      autoScan = await res.json();
+      renderAutoScan();
+    }
+
+    function withAutoScanError(fn) {
+      return async () => {
+        try {
+          await fn();
+          $("autoScanStatus").textContent = "Saved.";
+          $("autoScanStatus").className = "status clean";
+        } catch (err) {
+          $("autoScanStatus").textContent = err.message || String(err);
+          $("autoScanStatus").className = "status risk";
+        }
+      };
+    }
+
+    $("autoScanBtn").addEventListener("click", withAutoScanError(
+      () => postAutoScan({ enabled: !autoScan.enabled })
+    ));
+
+    for (const [checker, id] of Object.entries(TH_INPUTS)) {
+      $(id).addEventListener("change", withAutoScanError(() => {
+        const pct = Math.max(0, Math.min(100, parseFloat($(id).value) || 0));
+        return postAutoScan({ thresholds: { [checker]: pct / 100 } });
+      }));
+    }
+
+    $("autoScanMax").addEventListener("change", withAutoScanError(() => {
+      const n = parseInt($("autoScanMax").value, 10);
+      return postAutoScan({ max_reels: n > 0 ? n : 1 });
+    }));
+
     async function loadModels() {
       const res = await fetch("/models");
       if (!res.ok) return;
@@ -515,18 +670,34 @@ PAGE = """
         : "<span class='pill off'>no model object</span>";
     }
 
-    async function loadPriorityList() {
-      const res = await fetch("/priority-list");
-      if (!res.ok) return;
-      const data = await res.json();
-      const rows = (data.items || []).map((item) => {
+    function descCell(item) {
+      const id = item.job_id || "";
+      const full = item.description || "";
+      const words = full.split(/\s+/).filter(Boolean);
+      if (words.length <= 10 || !id) {
+        return `<td class="description-cell">${escapeHtml(full || "-")}</td>`;
+      }
+      const expanded = expandedDesc.has(id);
+      const text = expanded ? full : words.slice(0, 10).join(" ");
+      const label = expanded ? " show less" : " …more";
+      return `<td class="description-cell">${escapeHtml(text)}<button type="button" class="linkbtn" data-desc="${escapeHtml(id)}">${label}</button></td>`;
+    }
+
+    function moreRow(total, shown, kind, cols) {
+      let btns = "";
+      if (shown < total) btns += `<button type="button" class="linkbtn" data-more="${kind}">Show more (${total - shown})</button>`;
+      if (shown > PAGE_INIT) btns += ` <button type="button" class="linkbtn" data-less="${kind}">Show less</button>`;
+      return btns ? `<tr class="show-more-row"><td colspan="${cols}">${btns}</td></tr>` : "";
+    }
+
+    function renderPriority() {
+      const items = priorityItems;
+      const rows = items.slice(0, priorityShown).map((item) => {
         const c = item.method_confidences || {};
-        const source = item.source || {};
-        const reel = reelLink(source);
         return `
           <tr>
-            <td>${reel}</td>
-            <td class="description-cell">${escapeHtml(item.description || "-")}</td>
+            <td>${reelLink(item.source || {})}</td>
+            ${descCell(item)}
             <td>${escapeHtml(item.status || "")}</td>
             <td>${formatConfidence(item.priority)}</td>
             <td>${formatConfidence(item.risk_score)}</td>
@@ -539,7 +710,17 @@ PAGE = """
           </tr>
         `;
       });
-      $("priorityList").innerHTML = rows.length ? rows.join("") : "<tr><td colspan='11'>No jobs yet.</td></tr>";
+      $("priorityList").innerHTML = items.length
+        ? rows.join("") + moreRow(items.length, priorityShown, "priority", 11)
+        : "<tr><td colspan='11'>No jobs yet.</td></tr>";
+    }
+
+    async function loadPriorityList() {
+      const res = await fetch("/priority-list");
+      if (!res.ok) return;
+      const data = await res.json();
+      priorityItems = data.items || [];
+      renderPriority();
     }
 
     function reelLink(source) {
@@ -558,17 +739,15 @@ PAGE = """
       return date.toLocaleString();
     }
 
-    async function loadRecentJobs() {
-      const res = await fetch("/recent-jobs");
-      if (!res.ok) return;
-      const data = await res.json();
-      const rows = (data.items || []).map((item) => {
+    function renderRecent() {
+      const items = recentItems;
+      const rows = items.slice(0, recentShown).map((item) => {
         const c = item.method_confidences || {};
         return `
           <tr>
             <td>${formatTime(item.created_at)}</td>
             <td>${reelLink(item.source || {})}</td>
-            <td class="description-cell">${escapeHtml(item.description || "-")}</td>
+            ${descCell(item)}
             <td>${escapeHtml(item.status || "")}</td>
             <td>${formatConfidence(c.semantic)}</td>
             <td>${formatConfidence(c.ocr)}</td>
@@ -580,18 +759,56 @@ PAGE = """
           </tr>
         `;
       });
-      $("recentJobs").innerHTML = rows.length ? rows.join("") : "<tr><td colspan='11'>No jobs yet.</td></tr>";
+      $("recentJobs").innerHTML = items.length
+        ? rows.join("") + moreRow(items.length, recentShown, "recent", 11)
+        : "<tr><td colspan='11'>No jobs yet.</td></tr>";
     }
+
+    async function loadRecentJobs() {
+      const res = await fetch("/recent-jobs");
+      if (!res.ok) return;
+      const data = await res.json();
+      recentItems = data.items || [];
+      renderRecent();
+    }
+
+    function toggleDesc(id) {
+      if (expandedDesc.has(id)) expandedDesc.delete(id); else expandedDesc.add(id);
+      renderPriority();
+      renderRecent();
+    }
+
+    function showMore(kind) {
+      if (kind === "priority") priorityShown += PAGE_STEP; else recentShown += PAGE_STEP;
+      renderPriority();
+      renderRecent();
+    }
+
+    function showLess(kind) {
+      if (kind === "priority") priorityShown = PAGE_INIT; else recentShown = PAGE_INIT;
+      renderPriority();
+      renderRecent();
+    }
+
+    document.addEventListener("click", (e) => {
+      const d = e.target && e.target.dataset;
+      if (!d) return;
+      if (d.desc) toggleDesc(d.desc);
+      else if (d.more) showMore(d.more);
+      else if (d.less) showLess(d.less);
+    });
 
     loadModels().catch(() => {});
     loadPriorityList().catch(() => {});
     loadRecentJobs().catch(() => {});
     loadParserStatus().catch(() => {});
+    loadAutoScan().catch(() => {});
     setInterval(() => {
       loadPriorityList().catch(() => {});
       loadRecentJobs().catch(() => {});
       loadModels().catch(() => {});
       loadParserStatus().catch(() => {});
+      loadAutoScan().catch(() => {});
     }, 3000);
   </script>
 </body>
