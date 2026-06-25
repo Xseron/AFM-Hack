@@ -1,0 +1,8 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\1205e9e63ae149f79c112303a66e8372\instagram_DZ9zSAHMDSU.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Запаси на каждой схлочи
+Я козую когда нету
+Козую

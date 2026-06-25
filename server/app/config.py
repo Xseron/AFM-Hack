@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     parser_dir: str = ""
     parser_server_url: str = "http://localhost:8000"
     parser_max_reels: int = 30
+    # Per-platform hard cap (seconds) on how long the bot records a single video
+    # before sending the partial clip. 0 = no cap.
+    parser_max_video_seconds_instagram: float = 0.0
+    parser_max_video_seconds_tiktok: float = 0.0
     parser_chrome_path: str = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
     parser_cdp_port: int = 9222
     parser_chrome_profile_dir: str = ""  # empty = <parser_dir>/state/chrome-profile
@@ -46,6 +50,13 @@ class Settings(BaseSettings):
     investigator_url: str = "http://localhost:8010"
     telegram_url: str = "http://localhost:8020"
     httpx_timeout_seconds: float = 5.0
+
+    # OpenRouter LLM used to write a short "why we flagged it" summary for scam /
+    # semi-scam reels. Leave the API key empty to disable (jobs still process).
+    openrouter_api_key: str = ""
+    openrouter_model: str = "google/gemini-2.0-flash-001"
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_timeout_seconds: float = 30.0
 
     @property
     def enabled_pipeline_list(self) -> list[str]:

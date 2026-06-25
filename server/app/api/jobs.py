@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse
 
 from app.api.deps import get_components
 from app.api.serializers import method_confidences, scanner_confidences, source_info
+from app.pipelines.aggregator import verdict_for
 
 router = APIRouter()
 
@@ -22,6 +23,7 @@ async def get_job(job_id: str, components=Depends(get_components)) -> dict:
         "priority": job.priority,
         "risk_score": job.risk_score,
         "category": job.category,
+        "verdict": verdict_for(job.findings),
         "method_confidences": method_confidences(job.findings),
         "scanner_confidences": scanner_confidences(job.findings),
         "source": source_info(job),

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.pipelines.aggregator import verdict_for
+
 
 def method_confidences(findings) -> dict[str, float]:
     values = {
@@ -58,6 +60,7 @@ def job_list_item(job) -> dict:
         "priority": job.priority,
         "risk_score": job.risk_score,
         "category": job.category,
+        "verdict": verdict_for(job.findings),
         "source": source_info(job),
         "description": job.description or "",
         "created_at": job.created_at.isoformat() if job.created_at else None,

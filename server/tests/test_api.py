@@ -153,17 +153,19 @@ async def test_parser_feed_routes_tiktok_platform(app_client):
         def __init__(self):
             self.calls = []
 
-        def start_feed(self, max_reels=None, platform="instagram"):
-            self.calls.append(("feed", max_reels, platform))
+        def start_feed(self, max_reels=None, platform="instagram", max_video_seconds=None):
+            self.calls.append(("feed", max_reels, platform, max_video_seconds))
             return {"running": True, "platform": platform, "channel": f"{platform} feed"}
 
     fake = FakeParser()
     components.parser = fake
 
-    resp = await client.post("/parser/feed", json={"platform": "tiktok", "max_reels": 2})
+    resp = await client.post(
+        "/parser/feed", json={"platform": "tiktok", "max_reels": 2, "max_video_seconds": 9}
+    )
     assert resp.status_code == 200
     assert resp.json()["platform"] == "tiktok"
-    assert fake.calls == [("feed", 2, "tiktok")]
+    assert fake.calls == [("feed", 2, "tiktok", 9)]
 
 
 async def test_parser_reel_infers_tiktok_platform(app_client):
@@ -173,8 +175,8 @@ async def test_parser_reel_infers_tiktok_platform(app_client):
         def __init__(self):
             self.calls = []
 
-        def start_reel(self, reel_url, platform="instagram"):
-            self.calls.append((reel_url, platform))
+        def start_reel(self, reel_url, platform="instagram", max_video_seconds=None):
+            self.calls.append((reel_url, platform, max_video_seconds))
             return {"running": True, "platform": platform, "channel": reel_url}
 
     fake = FakeParser()
@@ -184,7 +186,7 @@ async def test_parser_reel_infers_tiktok_platform(app_client):
     resp = await client.post("/parser/reel", json={"reel_url": url})
     assert resp.status_code == 200
     assert resp.json()["platform"] == "tiktok"
-    assert fake.calls == [(url, "tiktok")]
+    assert fake.calls == [(url, "tiktok", None)]
 
 
 async def test_priority_list_includes_method_confidences(app_client):

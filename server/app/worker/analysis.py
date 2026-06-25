@@ -20,7 +20,9 @@ async def main() -> None:
     repo = JobRepository(make_sessionmaker(engine))
     registry = build_registry(settings.enabled_pipeline_list or None)
     queue = build_queue(settings)
-    worker = Worker(queue, ANALYSIS, make_analysis_handler(repo, registry, StubExtractor()))
+    worker = Worker(
+        queue, ANALYSIS, make_analysis_handler(repo, registry, StubExtractor(), settings=settings)
+    )
     await worker.run_forever()
 
 

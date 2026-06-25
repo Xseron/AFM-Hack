@@ -82,25 +82,46 @@ class ParserController:
         self._started_at: float | None = None
         self._log_path = str(Path(self._parser_dir) / "parser_run.log")
 
-    def start(self, channel_url: str, max_reels: int | None = None, platform: str = "instagram") -> dict:
+    def start(
+        self,
+        channel_url: str,
+        max_reels: int | None = None,
+        platform: str = "instagram",
+        max_video_seconds: float | None = None,
+    ) -> dict:
         channel_url = (channel_url or "").strip()
         if not channel_url:
             raise ValueError("channel_url must not be empty")
         platform = self._normalize_platform(platform)
-        return self._spawn(["--channel", channel_url], channel_url, max_reels=max_reels, platform=platform)
+        return self._spawn(
+            ["--channel", channel_url], channel_url,
+            max_reels=max_reels, platform=platform, max_video_seconds=max_video_seconds,
+        )
 
-    def start_reel(self, reel_url: str, platform: str = "instagram") -> dict:
+    def start_reel(
+        self, reel_url: str, platform: str = "instagram", max_video_seconds: float | None = None
+    ) -> dict:
         reel_url = (reel_url or "").strip()
         if not reel_url:
             raise ValueError("reel_url must not be empty")
         platform = self._normalize_platform(platform, source=reel_url)
-        return self._spawn(["--reel", reel_url], reel_url, platform=platform)
+        return self._spawn(
+            ["--reel", reel_url], reel_url, platform=platform, max_video_seconds=max_video_seconds
+        )
 
-    def start_feed(self, max_reels: int | None = None, platform: str = "instagram") -> dict:
+    def start_feed(
+        self,
+        max_reels: int | None = None,
+        platform: str = "instagram",
+        max_video_seconds: float | None = None,
+    ) -> dict:
         """Ensure the CDP browser is up, then record from the selected feed."""
         platform = self._normalize_platform(platform)
         browser = self.ensure_browser(platform=platform)
-        status = self._spawn([], f"{platform} feed", max_reels=max_reels, platform=platform)
+        status = self._spawn(
+            [], f"{platform} feed",
+            max_reels=max_reels, platform=platform, max_video_seconds=max_video_seconds,
+        )
         status["browser_launched"] = browser.get("launched", False)
         return status
 
@@ -145,6 +166,7 @@ class ParserController:
         label: str,
         max_reels: int | None = None,
         platform: str = "instagram",
+        max_video_seconds: float | None = None,
     ) -> dict:
         with self._lock:
             if self._is_running():
@@ -155,6 +177,8 @@ class ParserController:
                    "--server-url", self._server_url, "--platform", platform, *mode_args]
             if max_reels:
                 cmd += ["--max-reels", str(max_reels)]
+            if max_video_seconds and max_video_seconds > 0:
+                cmd += ["--max-video-seconds", str(max_video_seconds)]
 
             log = open(self._log_path, "ab", buffering=0)
             log.write(f"\n=== start {label} @ {time.ctime()} ===\n".encode("utf-8"))

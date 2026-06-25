@@ -44,6 +44,10 @@ class Config:
 
     # Timings (seconds)
     max_dwell: float = 60.0          # idle watchdog: never stay on one reel longer
+    # Hard cap on how long to record a single video. When reached we stop the
+    # recorder and upload whatever was captured, even if the video hasn't ended.
+    # 0/None = no explicit cap (only the idle watchdogs apply). Set per platform.
+    max_video_seconds: float | None = None
     comment_dwell: tuple = (2.0, 5.0)
     inter_reel_delay: tuple = (0.8, 3.0)
     base_watch: tuple = (6.0, 22.0)  # fallback watch window when duration is unknown
@@ -92,6 +96,16 @@ def _env_int(name: str) -> int | None:
         return None
 
 
+def _env_float(name: str) -> float | None:
+    value = os.getenv(name)
+    if not value:
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        return None
+
+
 def parse_args(argv: list[str] | None = None) -> Config:
     load_env()
     p = argparse.ArgumentParser(
@@ -110,6 +124,10 @@ def parse_args(argv: list[str] | None = None) -> Config:
                    help="Directory for saved .webm clips.")
     p.add_argument("--max-reels", type=int, default=_env_int("REELS_MAX_REELS"),
                    help="Stop after recording this many new videos (for testing).")
+    p.add_argument("--max-video-seconds", type=float, default=None,
+                   help="Hard cap on how long to record one video; after this many seconds we stop "
+                        "and upload the partial clip. 0/omitted = no cap. Defaults per platform from "
+                        "REELS_MAX_VIDEO_SECONDS / TIKTOK_MAX_VIDEO_SECONDS.")
     p.add_argument("--channel", dest="channel_url", default=os.getenv("REELS_CHANNEL", ""),
                    help="Parse videos from this profile/channel URL instead of the global feed.")
     p.add_argument("--reel", dest="reel_url", default=os.getenv("REELS_REEL", ""),
@@ -122,6 +140,14 @@ def parse_args(argv: list[str] | None = None) -> Config:
     )
     a = p.parse_args(argv)
     platform = _infer_platform(a.platform, a.channel_url, a.reel_url)
+    # Per-platform recording cap: explicit CLI flag wins, else the platform's env var.
+    max_video_seconds = a.max_video_seconds
+    if max_video_seconds is None:
+        max_video_seconds = _env_float(
+            "TIKTOK_MAX_VIDEO_SECONDS" if platform == "tiktok" else "REELS_MAX_VIDEO_SECONDS"
+        )
+    if max_video_seconds is not None and max_video_seconds <= 0:
+        max_video_seconds = None  # 0/negative disables the cap
     auto_login = (
         a.auto_login
         or _env_bool("REELS_AUTO_LOGIN")
@@ -134,6 +160,7 @@ def parse_args(argv: list[str] | None = None) -> Config:
         server_url=a.server_url,
         out_dir=a.out_dir,
         max_reels=a.max_reels,
+        max_video_seconds=max_video_seconds,
         channel_url=a.channel_url.strip(),
         reel_url=a.reel_url.strip(),
         instagram_username=os.getenv("INSTAGRAM_USERNAME", ""),

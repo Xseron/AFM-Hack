@@ -13,16 +13,31 @@ class StartRequest(BaseModel):
     channel_url: str
     max_reels: int | None = None
     platform: str = "instagram"
+    max_video_seconds: float | None = None
 
 
 class ReelRequest(BaseModel):
     reel_url: str
     platform: str = "instagram"
+    max_video_seconds: float | None = None
 
 
 class FeedRequest(BaseModel):
     max_reels: int | None = None
     platform: str = "instagram"
+    max_video_seconds: float | None = None
+
+
+def _max_video_seconds(settings, platform: str, override: float | None) -> float | None:
+    """Per-platform recording cap: request override wins, else the platform's setting."""
+    if override is not None and override > 0:
+        return override
+    value = (
+        settings.parser_max_video_seconds_tiktok
+        if platform == "tiktok"
+        else settings.parser_max_video_seconds_instagram
+    )
+    return value if value and value > 0 else None
 
 
 class AutoScanRequest(BaseModel):
@@ -46,8 +61,9 @@ async def start_parser(body: StartRequest, components=Depends(get_components)) -
         if "tiktok.com" not in url and not ok_handle:
             raise HTTPException(status_code=422, detail="expected a TikTok profile URL or handle")
     max_reels = body.max_reels or components.settings.parser_max_reels
+    cap = _max_video_seconds(components.settings, platform, body.max_video_seconds)
     try:
-        return components.parser.start(url, max_reels=max_reels, platform=platform)
+        return components.parser.start(url, max_reels=max_reels, platform=platform, max_video_seconds=cap)
     except RuntimeError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
     except ValueError as e:
@@ -58,8 +74,10 @@ async def start_parser(body: StartRequest, components=Depends(get_components)) -
 def start_feed(body: FeedRequest, components=Depends(get_components)) -> dict:
     # sync def: launching Chrome can block ~20s, so run it off the event loop.
     max_reels = body.max_reels if (body.max_reels and body.max_reels > 0) else None
+    platform = _platform(body.platform)
+    cap = _max_video_seconds(components.settings, platform, body.max_video_seconds)
     try:
-        return components.parser.start_feed(max_reels=max_reels, platform=_platform(body.platform))
+        return components.parser.start_feed(max_reels=max_reels, platform=platform, max_video_seconds=cap)
     except RuntimeError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
     except ValueError as e:
@@ -74,8 +92,9 @@ async def check_reel(body: ReelRequest, components=Depends(get_components)) -> d
         raise HTTPException(status_code=422, detail="expected an Instagram reel URL")
     if platform == "tiktok" and "/video/" not in url:
         raise HTTPException(status_code=422, detail="expected a TikTok video URL")
+    cap = _max_video_seconds(components.settings, platform, body.max_video_seconds)
     try:
-        return components.parser.start_reel(url, platform=platform)
+        return components.parser.start_reel(url, platform=platform, max_video_seconds=cap)
     except RuntimeError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
     except ValueError as e:

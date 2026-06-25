@@ -117,6 +117,7 @@ def _start_inline_workers(components: Components) -> list[asyncio.Task]:
             components.extractor,
             controller=components.parser,
             auto_scan=components.auto_scan,
+            settings=components.settings,
         ),
     )
     return [

@@ -152,3 +152,9 @@
 [reel] opening https://www.instagram.com/reel/DZUdo6CKwUm/
 [sent] DZUdo6CKwUm (573 KB)
 [done] reel parsed: DZUdo6CKwUm
+
+=== start tiktok feed @ Thu Jun 25 11:14:24 2026 ===
+[LIVE] watching tiktok feed. server=http://localhost:8000  out=recordings
+[sent] be253f44-cf71-44ff-bd1c-058be507b0e5 (6253 KB)
+[warn] TikTok watch watchdog reached 90s; moving on
+[sent] 7e5c5145-06cf-4f48-b181-42fa54e26458 (21234 KB)

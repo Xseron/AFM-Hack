@@ -1,6 +1,6 @@
 import { api, fmt } from "../api.js";
 import { escapeHtml, fmtTime } from "../util.js";
-import { categoryBadge } from "../components/riskBadge.js";
+import { categoryBadge, verdictBadge } from "../components/riskBadge.js";
 
 let timer = null;
 let items = [];
@@ -22,8 +22,8 @@ export function render(mount) {
     </section>
     <section class="card">
       <table>
-        <thead><tr><th>Time</th><th>Reel</th><th>Description</th><th>Status</th><th>Risk</th><th>Category</th></tr></thead>
-        <tbody id="rows"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
+        <thead><tr><th>Time</th><th>Reel</th><th>Description</th><th>Status</th><th>Risk</th><th>Verdict</th><th>Category</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="7" class="muted">Loading…</td></tr></tbody>
       </table>
     </section>`;
 
@@ -75,8 +75,9 @@ function draw(mount) {
       <td>${escapeHtml((it.description || "").slice(0, 80))}</td>
       <td>${escapeHtml(it.status || "")}</td>
       <td>${fmt(it.risk_score)}</td>
+      <td>${verdictBadge(it.verdict, it.category)}</td>
       <td>${categoryBadge(it.category)}</td></tr>`;
   });
   mount.querySelector("#rows").innerHTML = rows.length
-    ? rows.join("") : '<tr><td colspan="6" class="muted">No matching jobs.</td></tr>';
+    ? rows.join("") : '<tr><td colspan="7" class="muted">No matching jobs.</td></tr>';
 }

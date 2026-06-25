@@ -1,13 +1,20 @@
 from __future__ import annotations
 
+import logging
+
 from app.api.serializers import method_confidences
 from app.db.repository import JobRepository
+from app.llm.summary import summarize
+from app.pipelines.aggregator import verdict_for
 from app.pipelines.base import JobContext
+from app.pipelines.explain import Explanation
 from app.pipelines.extract import Extractor
 from app.pipelines.orchestrator import run_analysis, run_triage
 from app.pipelines.registry import PipelineRegistry
 from app.queue.base import ANALYSIS, JobQueue, QueueMessage
 from app.worker.base import Handler
+
+log = logging.getLogger(__name__)
 
 
 def _ctx(job) -> JobContext:
@@ -64,12 +71,32 @@ def _maybe_auto_scan(job, controller, auto_scan) -> None:
         pass  # parser busy; a later scam hit on this channel will retry
 
 
+async def _maybe_llm_summary(repo, settings, ctx, verdict, category, findings) -> None:
+    """For flagged reels, store a short LLM 'why we flagged it' summary (best-effort)."""
+    if settings is None or not getattr(settings, "openrouter_api_key", ""):
+        return
+    if verdict not in ("scam", "semi_scam"):
+        return
+    try:
+        text = await summarize(settings, ctx.description, verdict, category, findings)
+    except Exception as exc:  # never let the summary fail the job
+        log.warning("llm summary errored: %s", exc)
+        return
+    if not text:
+        return
+    await repo.add_explanations(
+        ctx.job_id,
+        [Explanation(scope="llm_summary", method=settings.openrouter_model, attributions=[], summary=text)],
+    )
+
+
 def make_analysis_handler(
     repo: JobRepository,
     registry: PipelineRegistry,
     extractor: Extractor,
     controller=None,
     auto_scan=None,
+    settings=None,
 ) -> Handler:
     async def handler(msg: QueueMessage) -> None:
         job = await repo.get_job(msg.job_id)
@@ -87,6 +114,8 @@ def make_analysis_handler(
             await repo.add_findings(job.id, findings)
             await repo.add_explanations(job.id, explanations)
             await repo.set_risk(job.id, score, category)
+            verdict = verdict_for(findings + triage_prior)
+            await _maybe_llm_summary(repo, settings, ctx, verdict, category, findings + triage_prior)
             await repo.set_status(job.id, "done")
         except Exception as exc:
             await repo.set_status(job.id, "failed", error=str(exc))

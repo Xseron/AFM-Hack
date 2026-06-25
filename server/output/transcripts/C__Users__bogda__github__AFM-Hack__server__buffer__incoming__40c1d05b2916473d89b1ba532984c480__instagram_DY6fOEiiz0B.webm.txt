@@ -1,0 +1,7 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\40c1d05b2916473d89b1ba532984c480\instagram_DY6fOEiiz0B.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Скажи мне честно, если я прямо сейчас переведу тебе 100 тысяч долларов на погашение твоих кредитов, проблем, на все что угодно.
+Ты не их потом вернешь.

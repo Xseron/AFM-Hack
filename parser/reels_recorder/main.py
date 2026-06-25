@@ -23,9 +23,13 @@ def _watch(page: Page, cfg: Config) -> None:
     prog = recorder.video_progress(page)
     duration = prog["duration"] if prog else 0.0
     target = humanize.target_seconds(cfg, plan, duration)
+    cap = cfg.max_video_seconds
     start = time.monotonic()
     while True:
         elapsed = time.monotonic() - start
+        if cap and elapsed >= cap:
+            print(f"[cap] reached max-video-seconds={cap:.0f}s; sending partial clip")
+            break
         if elapsed >= target or elapsed >= cfg.max_dwell:
             break
         prog = recorder.video_progress(page)
@@ -49,14 +53,17 @@ def _watch_tiktok(page: Page, cfg: Config) -> None:
     last_progress_at = start
     last_resume_at = 0.0
     last_current: float | None = None
-    max_wait = max(cfg.max_dwell, 90.0)
+    # An explicit per-platform cap (if set) takes priority over the idle watchdog.
+    cap = cfg.max_video_seconds
+    max_wait = cap if cap else max(cfg.max_dwell, 90.0)
     min_watch = 2.5
 
     while True:
         now = time.monotonic()
         elapsed = now - start
         if elapsed >= max_wait:
-            print(f"[warn] TikTok watch watchdog reached {max_wait:.0f}s; moving on")
+            reason = "max-video-seconds" if cap else "watch watchdog"
+            print(f"[cap] TikTok reached {reason}={max_wait:.0f}s; sending partial clip")
             break
 
         if now - last_resume_at >= 1.2:

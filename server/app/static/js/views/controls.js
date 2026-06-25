@@ -21,6 +21,15 @@ export function render(mount) {
     <section class="card">
       <h2>Parser</h2>
       <div class="row" style="display:grid;gap:10px">
+        <div class="row">
+          <button id="startInstagram" type="button">Start Instagram Reels Parsing</button>
+          <button id="startTiktok" type="button">Start TikTok Parsing</button>
+          <button id="stopFeed" type="button" class="secondary">Stop</button>
+        </div>
+        <div class="row">
+          <label>IG max sec/video <input id="maxSecInstagram" type="number" min="1" style="width:120px" placeholder="no cap"></label>
+          <label>TikTok max sec/video <input id="maxSecTiktok" type="number" min="1" style="width:120px" placeholder="no cap"></label>
+        </div>
         <input id="channelUrl" placeholder="https://instagram.com/username/ or @username">
         <div class="row">
           <input id="maxReels" type="number" min="1" placeholder="max reels (server default)">
@@ -92,11 +101,31 @@ function wireUpload(root) {
 function wireParser(root) {
   const status = root.querySelector("#parserStatus");
   const num = (id) => { const n = parseInt(root.querySelector(id).value, 10); return Number.isNaN(n) ? null : n; };
+  // Per-platform recording cap (seconds): TikTok vs Instagram input.
+  const maxSec = (platform) => {
+    const n = parseFloat(root.querySelector(platform === "tiktok" ? "#maxSecTiktok" : "#maxSecInstagram").value);
+    return Number.isNaN(n) || n <= 0 ? null : n;
+  };
+  const platformOf = (url) => (/tiktok\.com/i.test(url || "") ? "tiktok" : "instagram");
+  const startFeed = async (platform, label) => {
+    const body = { platform };
+    const m = num("#feedMax"); if (m) body.max_reels = m;
+    const s = maxSec(platform); if (s) body.max_video_seconds = s;
+    status.textContent = `Starting ${label} parsing…`;
+    try { renderParser(root, await postJson("/parser/feed", body)); }
+    catch (err) { status.textContent = err.message; }
+  };
+  root.querySelector("#startInstagram").addEventListener("click", () => startFeed("instagram", "Instagram reels"));
+  root.querySelector("#startTiktok").addEventListener("click", () => startFeed("tiktok", "TikTok"));
+  root.querySelector("#stopFeed").addEventListener("click", async () => {
+    try { renderParser(root, await postJson("/parser/stop", {})); } catch (err) { status.textContent = err.message; }
+  });
   root.querySelector("#startParser").addEventListener("click", async () => {
     const channel = root.querySelector("#channelUrl").value.trim();
     if (!channel) { status.textContent = "Enter a channel."; return; }
     const body = { channel_url: channel };
     const m = num("#maxReels"); if (m) body.max_reels = m;
+    const s = maxSec(platformOf(channel)); if (s) body.max_video_seconds = s;
     try { renderParser(root, await postJson("/parser/start", body)); }
     catch (err) { status.textContent = err.message; }
   });
@@ -110,7 +139,9 @@ function wireParser(root) {
   root.querySelector("#checkReel").addEventListener("click", async () => {
     const url = root.querySelector("#reelUrl").value.trim();
     if (!url) { status.textContent = "Paste a reel URL."; return; }
-    try { renderParser(root, await postJson("/parser/reel", { reel_url: url })); }
+    const body = { reel_url: url };
+    const s = maxSec(platformOf(url)); if (s) body.max_video_seconds = s;
+    try { renderParser(root, await postJson("/parser/reel", body)); }
     catch (err) { status.textContent = err.message; }
   });
 }
