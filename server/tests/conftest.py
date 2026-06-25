@@ -15,6 +15,9 @@ async def app_client(tmp_path):
         database_url="sqlite+aiosqlite:///:memory:",
         storage_dir=str(tmp_path / "buffer"),
         models_enabled=False,
+        # Point plugin discovery at an empty tmp dir so the suite is hermetic
+        # (never picks up checker plugins shipped in <server>/plugins).
+        pipeline_plugins_dir=str(tmp_path / "plugins"),
     )
     components = build_components(settings)
     await init_components(components)

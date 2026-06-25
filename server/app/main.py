@@ -6,12 +6,13 @@ from dataclasses import dataclass
 
 from fastapi import FastAPI
 
-from app.api import dedup, health, jobs, parser, pipelines, review, ui, videos
+from app.api import architecture, dedup, health, jobs, parser, pipelines, review, ui, videos
 from app.config import Settings, get_settings
 from app.db.repository import JobRepository
 from app.db.session import init_db, make_engine, make_sessionmaker
 from app.dedup.neardup import NearDupIndex, NullNearDupIndex
 from app.parser_control import AutoScanState, ParserController
+from app.pipelines.architecture import PipelineArchitecture
 from app.pipelines.extract import Extractor, StubExtractor
 from app.pipelines.registry import PipelineRegistry
 from app.pipelines.stubs import build_registry
@@ -32,6 +33,7 @@ class Components:
     neardup: NearDupIndex
     parser: ParserController
     auto_scan: AutoScanState
+    architecture: PipelineArchitecture
     models: object | None = None
 
 
@@ -51,6 +53,9 @@ def build_components(settings: Settings) -> Components:
         registry = build_real_registry(models)
     else:
         registry = build_registry(settings.enabled_pipeline_list or None)
+
+    arch = PipelineArchitecture(registry, settings.pipeline_plugins_dir)
+    arch.reload_plugins()  # hot-load any checker plugins into the live registry
 
     return Components(
         settings=settings,
@@ -75,6 +80,7 @@ def build_components(settings: Settings) -> Components:
                 "audio": settings.auto_scan_threshold_audio,
             },
         ),
+        architecture=arch,
         models=models,
     )
 
@@ -128,7 +134,7 @@ def create_app(settings: Settings | None = None, components: Components | None =
     app = FastAPI(title="AI Media Watch", lifespan=lifespan)
     app.state.components = components
 
-    for module in (ui, health, videos, jobs, review, pipelines, dedup, parser):
+    for module in (ui, health, videos, jobs, review, pipelines, dedup, parser, architecture):
         app.include_router(module.router)
     return app
 

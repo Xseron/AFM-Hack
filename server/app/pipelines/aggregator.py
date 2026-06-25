@@ -3,6 +3,9 @@ from __future__ import annotations
 from app.pipelines.base import Finding
 from app.pipelines.explain import Attribution, Explanation
 
+# Per-modality contribution weights. Mutated in place at runtime from the
+# Pipeline tab (see app.pipelines.architecture), so edit the dict contents
+# rather than rebinding the name.
 MODALITY_WEIGHT: dict[str, float] = {
     "triage": 0.2,
     "text": 0.3,
@@ -10,6 +13,10 @@ MODALITY_WEIGHT: dict[str, float] = {
     "audio": 0.2,
     "visual": 0.15,
 }
+
+# Risk score at/above which an otherwise-uncategorized job is called "fraud".
+# Rebound at runtime from the Pipeline tab's Aggregator node.
+CATEGORY_THRESHOLD: float = 0.5
 
 _GAMBLING = ("казино", "ставк", "casino")
 _PYRAMID = ("пирамид", "реферал", "инвест", "доход")
@@ -23,7 +30,7 @@ def _category(findings: list[Finding], score: float) -> str:
         return "gambling"
     if any(k in blob for k in _PYRAMID):
         return "pyramid"
-    return "fraud" if score >= 0.5 else "clean"
+    return "fraud" if score >= CATEGORY_THRESHOLD else "clean"
 
 
 def aggregate(findings: list[Finding]) -> tuple[float, str, Explanation]:

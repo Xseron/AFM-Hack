@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     parser_dir: str = ""
     parser_server_url: str = "http://localhost:8000"
     parser_max_reels: int = 30
+    # Folder scanned for code-backed checker plugins (see app.pipelines.plugins).
+    # Empty = auto-detect (<server>/plugins).
+    pipeline_plugins_dir: str = ""
     # Auto-investigate: when a reel is flagged scam (any checker >= threshold),
     # automatically scan its whole channel (up to max). Toggled live from the UI.
     auto_scan_enabled: bool = False

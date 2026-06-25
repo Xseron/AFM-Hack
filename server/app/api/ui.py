@@ -186,6 +186,56 @@ PAGE = """
     }
     .pill.on { color: var(--good); border-color: #abefc6; background: #ecfdf3; }
     .pill.off { color: var(--warn); border-color: #fedf89; background: #fffaeb; }
+    /* ---- tabs ---- */
+    .tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--line); }
+    .tab {
+      background: none; color: var(--muted); border: 0;
+      border-bottom: 2px solid transparent; border-radius: 0;
+      padding: 8px 14px; min-height: 0; font-weight: 700; cursor: pointer;
+    }
+    .tab:hover { background: none; color: var(--text); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tabpane { display: grid; gap: 18px; }
+    /* ---- pipeline flow graph ---- */
+    .flow {
+      display: flex; align-items: stretch; gap: 0;
+      overflow-x: auto; padding-bottom: 8px;
+    }
+    .stage { display: flex; align-items: stretch; }
+    .stage-col {
+      display: flex; flex-direction: column; gap: 10px;
+      min-width: 210px; max-width: 240px;
+    }
+    .stage-head {
+      font-size: 12px; text-transform: uppercase; letter-spacing: .04em;
+      color: var(--muted); font-weight: 700; margin-bottom: 2px;
+    }
+    .stage-arrow {
+      display: flex; align-items: center; color: var(--line);
+      font-size: 24px; padding: 0 10px; user-select: none;
+    }
+    .node {
+      border: 1px solid var(--line); border-radius: 8px; background: #fbfcff;
+      padding: 10px 12px; display: grid; gap: 8px;
+    }
+    .node.off { opacity: 0.6; }
+    .node.err { border-color: #fda29b; background: #fff4f3; }
+    .node-info { background: #f3f6fb; border-style: dashed; color: var(--muted); font-size: 13px; }
+    .node-title { font-weight: 700; font-size: 14px; overflow-wrap: anywhere; }
+    .node-badges { display: flex; flex-wrap: wrap; gap: 5px; }
+    .badge {
+      font-size: 10px; text-transform: uppercase; letter-spacing: .03em;
+      border-radius: 999px; padding: 2px 7px; border: 1px solid var(--line);
+      background: #fff; color: var(--muted); font-weight: 700;
+    }
+    .badge.plugin { color: var(--accent); border-color: #b9d4f7; background: #eef5ff; }
+    .node-ctl { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+    .node-ctl input[type=number] { width: 78px; padding: 6px 8px; }
+    .node-ctl label { display: flex; align-items: center; gap: 6px; flex-direction: row; }
+    .node .err-msg { color: var(--bad); font-size: 12px; overflow-wrap: anywhere; }
+    .switch { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-weight: 600; }
+    .switch input { width: auto; }
+    .weights-mini { font-size: 12px; color: var(--muted); line-height: 1.6; }
     @media (max-width: 760px) {
       .summary, .confidence-grid { grid-template-columns: 1fr 1fr; }
       .row { grid-template-columns: 1fr; }
@@ -198,6 +248,12 @@ PAGE = """
     <h1>AI Media Watch</h1>
   </header>
   <main>
+    <nav class="tabs">
+      <button id="tabDashboardBtn" type="button" class="tab active" data-tab="dashboard">Dashboard</button>
+      <button id="tabPipelineBtn" type="button" class="tab" data-tab="pipeline">Pipeline</button>
+    </nav>
+
+    <div id="tab-dashboard" class="tabpane">
     <section>
       <h2>Upload Video</h2>
       <form id="uploadForm">
@@ -337,6 +393,20 @@ PAGE = """
       <div id="modelStatus" class="status">Loading model status...</div>
       <div id="models" class="models"></div>
     </section>
+    </div><!-- /tab-dashboard -->
+
+    <div id="tab-pipeline" class="tabpane" hidden>
+      <section>
+        <h2>Pipeline Architecture</h2>
+        <p class="status">The flow each reel runs through, left to right. Toggle a checker on/off, retune its weight, set the aggregator's fraud threshold, or tune the investigator. Drop a <code>.py</code> checker in the plugins folder and press <em>Reload plugins</em> to add a new node — see <code>plugins/README.md</code> for the format.</p>
+        <div class="actions">
+          <button id="reloadPluginsBtn" type="button" class="secondary">Reload plugins</button>
+          <span id="pluginsDir" class="status"></span>
+        </div>
+        <div id="archStatus" class="status"></div>
+        <div id="flow" class="flow"><span class="status">Loading pipeline...</span></div>
+      </section>
+    </div><!-- /tab-pipeline -->
   </main>
 
   <script>
@@ -790,20 +860,161 @@ PAGE = """
       renderRecent();
     }
 
+    // ---- Pipeline tab: flow graph + live architecture editing ----
+    let activeTab = "dashboard";
+    let archData = null;
+
+    function switchTab(tab) {
+      activeTab = tab;
+      document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+      $("tab-dashboard").hidden = tab !== "dashboard";
+      $("tab-pipeline").hidden = tab !== "pipeline";
+      if (tab === "pipeline") loadArchitecture().catch(() => {});
+    }
+    document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => switchTab(b.dataset.tab)));
+
+    function archMsg(text, isError = false) {
+      $("archStatus").textContent = text;
+      $("archStatus").className = isError ? "status risk" : "status clean";
+    }
+
+    async function loadArchitecture() {
+      const res = await fetch("/architecture");
+      if (!res.ok) return;
+      archData = await res.json();
+      renderFlow();
+    }
+
+    function fmtW(v) { return typeof v === "number" ? v.toFixed(2) : "—"; }
+
+    function pipelineNodeHtml(n) {
+      if (n.error) {
+        return `<div class="node err">
+          <div class="node-title">${escapeHtml(n.label)}</div>
+          <div class="node-badges"><span class="badge plugin">plugin</span><span class="badge">load error</span></div>
+          <div class="err-msg">${escapeHtml(n.error)}</div>
+        </div>`;
+      }
+      const weightCtl = (typeof n.weight === "number")
+        ? `<div class="node-ctl"><label>weight
+             <input type="number" min="0" max="1" step="0.05" value="${n.weight.toFixed(2)}" data-node-weight="${escapeHtml(n.id)}"></label></div>`
+        : "";
+      const del = n.removable
+        ? `<div class="node-ctl"><button type="button" class="linkbtn" data-node-del="${escapeHtml(n.id)}">remove</button></div>`
+        : "";
+      return `<div class="node${n.enabled ? "" : " off"}">
+        <div class="node-title">${escapeHtml(n.label)}</div>
+        <div class="node-badges">
+          <span class="badge ${n.source === "plugin" ? "plugin" : ""}">${escapeHtml(n.source)}</span>
+          ${n.checker ? `<span class="badge">${escapeHtml(n.checker)}</span>` : ""}
+        </div>
+        <label class="switch"><input type="checkbox" data-node-toggle="${escapeHtml(n.id)}" ${n.enabled ? "checked" : ""}> ${n.enabled ? "enabled" : "disabled"}</label>
+        ${weightCtl}${del}
+      </div>`;
+    }
+
+    function aggregateNodeHtml(n) {
+      const rows = Object.entries(n.weights || {}).map(([k, v]) => `${escapeHtml(k)}: ${fmtW(v)}`).join("<br>");
+      return `<div class="node">
+        <div class="node-title">Aggregator</div>
+        <div class="node-badges"><span class="badge">weighted sum</span></div>
+        <div class="node-ctl"><label>fraud ≥
+          <input type="number" min="0" max="1" step="0.05" value="${(n.category_threshold ?? 0).toFixed(2)}" data-agg-threshold></label></div>
+        <div class="weights-mini">${rows}</div>
+      </div>`;
+    }
+
+    function investigateNodeHtml(n) {
+      const th = n.thresholds || {};
+      const row = (label, key) => `<div class="node-ctl"><label>${label} %
+        <input type="number" min="0" max="100" step="1" value="${Math.round((th[key] ?? 0) * 100)}" data-inv-th="${key}"></label></div>`;
+      return `<div class="node${n.enabled ? "" : " off"}">
+        <div class="node-title">Investigator</div>
+        <div class="node-badges"><span class="badge">auto-scan</span></div>
+        <label class="switch"><input type="checkbox" data-inv-toggle ${n.enabled ? "checked" : ""}> ${n.enabled ? "ON" : "OFF"}</label>
+        <div class="node-ctl"><label>max reels <input type="number" min="1" step="1" value="${n.max_reels || ""}" data-inv-max></label></div>
+        ${row("Semantic", "semantic")}${row("OCR", "ocr")}${row("CLIP", "clip")}${row("Audio", "audio")}
+      </div>`;
+    }
+
+    function stageColHtml(stage) {
+      let body = "";
+      if (stage.kind === "info") body = `<div class="node node-info">${escapeHtml(stage.note || "")}</div>`;
+      else if (stage.kind === "pipelines") body = (stage.nodes || []).map(pipelineNodeHtml).join("") || `<div class="node node-info">none</div>`;
+      else if (stage.kind === "aggregate") body = aggregateNodeHtml((stage.nodes || [])[0] || {});
+      else if (stage.kind === "investigate") body = investigateNodeHtml((stage.nodes || [])[0] || {});
+      return `<div class="stage"><div class="stage-col"><div class="stage-head">${escapeHtml(stage.label)}</div>${body}</div></div>`;
+    }
+
+    function renderFlow() {
+      if (!archData) return;
+      $("flow").innerHTML = archData.stages.map(stageColHtml).join('<div class="stage-arrow">&rsaquo;</div>');
+      $("pluginsDir").textContent = archData.plugins_dir ? `plugins folder: ${archData.plugins_dir}` : "";
+    }
+
+    async function postNode(id, body) {
+      const res = await fetch(`/architecture/node/${encodeURIComponent(id)}`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(await res.text());
+    }
+
+    async function deleteNode(id) {
+      if (!confirm(`Remove checker "${id}" from the running pipeline? (the plugin file stays on disk)`)) return;
+      try {
+        const res = await fetch(`/architecture/node/${encodeURIComponent(id)}`, { method: "DELETE" });
+        if (!res.ok) throw new Error(await res.text());
+        await loadArchitecture();
+        archMsg(`Removed ${id}.`);
+      } catch (err) { archMsg(err.message || String(err), true); }
+    }
+
+    $("reloadPluginsBtn").addEventListener("click", async () => {
+      $("reloadPluginsBtn").disabled = true;
+      try {
+        const res = await fetch("/architecture/reload", { method: "POST" });
+        if (!res.ok) throw new Error(await res.text());
+        archData = await res.json();
+        renderFlow();
+        archMsg("Plugins reloaded.");
+      } catch (err) { archMsg(err.message || String(err), true); }
+      finally { $("reloadPluginsBtn").disabled = false; }
+    });
+
+    document.addEventListener("change", async (e) => {
+      const d = e.target && e.target.dataset;
+      if (!d) return;
+      try {
+        if (d.nodeToggle !== undefined) { await postNode(d.nodeToggle, { enabled: e.target.checked }); await loadArchitecture(); archMsg("Saved."); }
+        else if (d.nodeWeight !== undefined) { await postNode(d.nodeWeight, { weight: parseFloat(e.target.value) || 0 }); await loadArchitecture(); archMsg("Saved."); }
+        else if (d.aggThreshold !== undefined) {
+          const r = await fetch("/architecture/aggregate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ category_threshold: parseFloat(e.target.value) || 0 }) });
+          if (!r.ok) throw new Error(await r.text());
+          await loadArchitecture(); archMsg("Saved.");
+        }
+        else if (d.invToggle !== undefined) { await postAutoScan({ enabled: e.target.checked }); await loadArchitecture(); archMsg("Saved."); }
+        else if (d.invMax !== undefined) { const n = parseInt(e.target.value, 10); await postAutoScan({ max_reels: n > 0 ? n : 1 }); await loadArchitecture(); archMsg("Saved."); }
+        else if (d.invTh !== undefined) { const pct = Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)); await postAutoScan({ thresholds: { [d.invTh]: pct / 100 } }); await loadArchitecture(); archMsg("Saved."); }
+      } catch (err) { archMsg(err.message || String(err), true); }
+    });
+
     document.addEventListener("click", (e) => {
       const d = e.target && e.target.dataset;
       if (!d) return;
       if (d.desc) toggleDesc(d.desc);
       else if (d.more) showMore(d.more);
       else if (d.less) showLess(d.less);
+      else if (d.nodeDel) deleteNode(d.nodeDel);
     });
 
+    switchTab("dashboard");
     loadModels().catch(() => {});
     loadPriorityList().catch(() => {});
     loadRecentJobs().catch(() => {});
     loadParserStatus().catch(() => {});
     loadAutoScan().catch(() => {});
     setInterval(() => {
+      if (activeTab !== "dashboard") return;  // don't clobber pipeline edits
       loadPriorityList().catch(() => {});
       loadRecentJobs().catch(() => {});
       loadModels().catch(() => {});

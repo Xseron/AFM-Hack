@@ -11,6 +11,16 @@ class PipelineRegistry:
         self._pipelines[pipeline.name] = pipeline
         return pipeline
 
+    def remove(self, name: str) -> None:
+        """Drop a pipeline so it no longer runs. No-op if it isn't registered."""
+        self._pipelines.pop(name, None)
+
+    def get(self, name: str) -> Pipeline | None:
+        return self._pipelines.get(name)
+
+    def __contains__(self, name: object) -> bool:
+        return name in self._pipelines
+
     def all(self) -> list[Pipeline]:
         return list(self._pipelines.values())
 
