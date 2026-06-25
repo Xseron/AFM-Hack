@@ -1,0 +1,8 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\1f94016449ff46b8a6fdcb5c4dc68f36\instagram_DZJ-yQ4sFvL.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Только деньок тебе нужно, чтобы закрыть все твои жизненные
+вопросы.
+Кредить, закрыть, можно...

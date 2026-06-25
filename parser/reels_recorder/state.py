@@ -9,7 +9,7 @@ from .cli import Config
 
 class SeenStore:
     def __init__(self, cfg: Config):
-        self.path = os.path.join(cfg.state_dir, "seen_reels.json")
+        self.path = os.path.join(cfg.state_dir, f"seen_{cfg.platform}.json")
         self._seen: set[str] = set()
         self._load()
 

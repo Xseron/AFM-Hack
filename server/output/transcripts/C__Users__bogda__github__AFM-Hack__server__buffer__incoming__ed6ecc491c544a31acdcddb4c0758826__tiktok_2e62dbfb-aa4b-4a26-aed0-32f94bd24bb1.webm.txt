@@ -1,0 +1,11 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\ed6ecc491c544a31acdcddb4c0758826\tiktok_2e62dbfb-aa4b-4a26-aed0-32f94bd24bb1.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Удачи!
+Я тебе выślила звук?
+Смотрите на моём Marshmallow и что-то.
+Товарищ родился?
+Какая washroom?
+Нет.

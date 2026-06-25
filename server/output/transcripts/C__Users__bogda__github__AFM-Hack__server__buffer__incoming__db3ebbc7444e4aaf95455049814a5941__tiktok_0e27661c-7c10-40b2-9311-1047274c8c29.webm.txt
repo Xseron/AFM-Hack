@@ -1,0 +1,6 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\db3ebbc7444e4aaf95455049814a5941\tiktok_0e27661c-7c10-40b2-9311-1047274c8c29.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Маталайн, буткиным гульбахом

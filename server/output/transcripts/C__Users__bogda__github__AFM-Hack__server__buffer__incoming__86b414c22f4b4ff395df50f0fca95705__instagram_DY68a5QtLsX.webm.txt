@@ -1,0 +1,6 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\86b414c22f4b4ff395df50f0fca95705\instagram_DY68a5QtLsX.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Скажи честно, сколько тебе нужно денег, чтобы...

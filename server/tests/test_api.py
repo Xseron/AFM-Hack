@@ -76,6 +76,55 @@ async def test_architecture_ui_served(app_client):
     assert "Reload plugins" in resp.text
 
 
+async def test_architecture_includes_tiktok_source(app_client):
+    client, _ = app_client
+    resp = await client.get("/architecture")
+    assert resp.status_code == 200
+    source = next(s for s in resp.json()["stages"] if s["id"] == "source")
+    assert {n["id"] for n in source["nodes"]} == {"instagram", "tiktok"}
+
+
+async def test_parser_feed_routes_tiktok_platform(app_client):
+    client, components = app_client
+
+    class FakeParser:
+        def __init__(self):
+            self.calls = []
+
+        def start_feed(self, max_reels=None, platform="instagram"):
+            self.calls.append(("feed", max_reels, platform))
+            return {"running": True, "platform": platform, "channel": f"{platform} feed"}
+
+    fake = FakeParser()
+    components.parser = fake
+
+    resp = await client.post("/parser/feed", json={"platform": "tiktok", "max_reels": 2})
+    assert resp.status_code == 200
+    assert resp.json()["platform"] == "tiktok"
+    assert fake.calls == [("feed", 2, "tiktok")]
+
+
+async def test_parser_reel_infers_tiktok_platform(app_client):
+    client, components = app_client
+
+    class FakeParser:
+        def __init__(self):
+            self.calls = []
+
+        def start_reel(self, reel_url, platform="instagram"):
+            self.calls.append((reel_url, platform))
+            return {"running": True, "platform": platform, "channel": reel_url}
+
+    fake = FakeParser()
+    components.parser = fake
+
+    url = "https://www.tiktok.com/@user6302021905958/video/1234567890123456789"
+    resp = await client.post("/parser/reel", json={"reel_url": url})
+    assert resp.status_code == 200
+    assert resp.json()["platform"] == "tiktok"
+    assert fake.calls == [(url, "tiktok")]
+
+
 async def test_priority_list_includes_method_confidences(app_client):
     client, _ = app_client
     files = {"video": ("clip.mp4", b"\x44\x55\x66", "video/mp4")}

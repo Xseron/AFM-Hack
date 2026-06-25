@@ -1,0 +1,5 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\5a4ebd83e9204028bbfb207cc2faa5e7\instagram_DX4kVaps8EE.webm
+# frames_ocrd: 1
+
+X2
+mym

@@ -1,0 +1,9 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\51a8760957a1493486d18ec9cceca2bd\tiktok_40844251-394b-4cfd-9ca5-b686c3e26ec5.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Обожаю, не помню, как не меня тоже.
+Каждый раз, как не жду, и бигут мурашки,
+Покоже, она меня любит, я верю, и боже.
+Это меня любит.

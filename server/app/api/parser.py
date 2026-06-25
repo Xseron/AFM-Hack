@@ -12,14 +12,17 @@ router = APIRouter(prefix="/parser")
 class StartRequest(BaseModel):
     channel_url: str
     max_reels: int | None = None
+    platform: str = "instagram"
 
 
 class ReelRequest(BaseModel):
     reel_url: str
+    platform: str = "instagram"
 
 
 class FeedRequest(BaseModel):
     max_reels: int | None = None
+    platform: str = "instagram"
 
 
 class AutoScanRequest(BaseModel):
@@ -31,13 +34,20 @@ class AutoScanRequest(BaseModel):
 @router.post("/start")
 async def start_parser(body: StartRequest, components=Depends(get_components)) -> dict:
     url = (body.channel_url or "").strip()
+    platform = _platform(body.platform, url)
     if not url:
         raise HTTPException(status_code=422, detail="channel_url must not be empty")
-    if "instagram.com" not in url and not url.lstrip("@").replace(".", "").replace("_", "").isalnum():
-        raise HTTPException(status_code=422, detail="expected an Instagram profile URL or handle")
+    if platform == "instagram":
+        ok_handle = url.lstrip("@").replace(".", "").replace("_", "").isalnum()
+        if "instagram.com" not in url and not ok_handle:
+            raise HTTPException(status_code=422, detail="expected an Instagram profile URL or handle")
+    elif platform == "tiktok":
+        ok_handle = url.lstrip("@").replace(".", "").replace("_", "").replace("-", "").isalnum()
+        if "tiktok.com" not in url and not ok_handle:
+            raise HTTPException(status_code=422, detail="expected a TikTok profile URL or handle")
     max_reels = body.max_reels or components.settings.parser_max_reels
     try:
-        return components.parser.start(url, max_reels=max_reels)
+        return components.parser.start(url, max_reels=max_reels, platform=platform)
     except RuntimeError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
     except ValueError as e:
@@ -49,18 +59,23 @@ def start_feed(body: FeedRequest, components=Depends(get_components)) -> dict:
     # sync def: launching Chrome can block ~20s, so run it off the event loop.
     max_reels = body.max_reels if (body.max_reels and body.max_reels > 0) else None
     try:
-        return components.parser.start_feed(max_reels=max_reels)
+        return components.parser.start_feed(max_reels=max_reels, platform=_platform(body.platform))
     except RuntimeError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
 
 
 @router.post("/reel")
 async def check_reel(body: ReelRequest, components=Depends(get_components)) -> dict:
     url = (body.reel_url or "").strip()
-    if "/reel" not in url:
+    platform = _platform(body.platform, url)
+    if platform == "instagram" and "/reel" not in url:
         raise HTTPException(status_code=422, detail="expected an Instagram reel URL")
+    if platform == "tiktok" and "/video/" not in url:
+        raise HTTPException(status_code=422, detail="expected a TikTok video URL")
     try:
-        return components.parser.start_reel(url)
+        return components.parser.start_reel(url, platform=platform)
     except RuntimeError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
     except ValueError as e:
@@ -95,3 +110,13 @@ async def set_auto_scan(body: AutoScanRequest, components=Depends(get_components
     if body.max_reels is not None and body.max_reels > 0:
         state.max_reels = body.max_reels
     return state.as_dict()
+
+
+def _platform(value: str, source: str = "") -> str:
+    raw = (value or "").strip().lower()
+    blob = f"{raw} {source or ''}".lower()
+    if "tiktok.com" in blob or raw == "tiktok":
+        return "tiktok"
+    if "instagram.com" in blob or raw in ("", "instagram"):
+        return "instagram"
+    raise HTTPException(status_code=422, detail=f"unsupported parser platform: {value}")

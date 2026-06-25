@@ -17,12 +17,16 @@ LOGIN_MARKERS = [
     'input[name="password"]',
 ]
 
-REELS_URL = "https://www.instagram.com/reels/"
+INSTAGRAM_REELS_URL = "https://www.instagram.com/reels/"
+TIKTOK_FEED_URL = "https://www.tiktok.com/foryou"
+REELS_URL = INSTAGRAM_REELS_URL
+PLATFORMS = ("instagram", "tiktok")
 
 
 @dataclass
 class Config:
     debug: bool = False
+    platform: str = "instagram"
     cdp_url: str = "http://127.0.0.1:9222"  # 127.0.0.1, not localhost (Chrome CDP is IPv4-only)
     server_url: str = "http://localhost:8000"
     out_dir: str = "recordings"
@@ -34,6 +38,8 @@ class Config:
     reel_url: str = ""
     instagram_username: str = ""
     instagram_password: str = ""
+    tiktok_username: str = ""
+    tiktok_password: str = ""
     auto_login: bool = False
 
     # Timings (seconds)
@@ -90,10 +96,12 @@ def parse_args(argv: list[str] | None = None) -> Config:
     load_env()
     p = argparse.ArgumentParser(
         prog="reels_recorder",
-        description="Record Instagram Reels via an anti-detect browser and upload them.",
+        description="Record Instagram Reels or TikTok videos via a CDP browser and upload them.",
     )
     p.add_argument("--debug", action="store_true", default=_env_bool("REELS_DEBUG"),
                    help="Pretend to upload (no HTTP) and assume server returns True for all actions.")
+    p.add_argument("--platform", choices=PLATFORMS, default=os.getenv("REELS_PLATFORM", Config.platform),
+                   help="Short-video platform to parse.")
     p.add_argument("--cdp-url", default=os.getenv("REELS_CDP_URL", Config.cdp_url),
                    help="CDP endpoint of the already-running anti-detect browser (use 127.0.0.1, not localhost).")
     p.add_argument("--server-url", default=os.getenv("REELS_SERVER_URL", Config.server_url),
@@ -101,16 +109,27 @@ def parse_args(argv: list[str] | None = None) -> Config:
     p.add_argument("--out", dest="out_dir", default=os.getenv("REELS_OUT_DIR", Config.out_dir),
                    help="Directory for saved .webm clips.")
     p.add_argument("--max-reels", type=int, default=_env_int("REELS_MAX_REELS"),
-                   help="Stop after recording this many new reels (for testing).")
+                   help="Stop after recording this many new videos (for testing).")
     p.add_argument("--channel", dest="channel_url", default=os.getenv("REELS_CHANNEL", ""),
-                   help="Parse reels from this profile/channel URL instead of the global feed.")
+                   help="Parse videos from this profile/channel URL instead of the global feed.")
     p.add_argument("--reel", dest="reel_url", default=os.getenv("REELS_REEL", ""),
-                   help="Parse exactly this one reel URL and exit.")
-    p.add_argument("--auto-login", action="store_true", default=_env_bool("INSTAGRAM_AUTO_LOGIN"),
-                   help="Try to log in using INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD from .env.")
+                   help="Parse exactly this one video URL and exit.")
+    p.add_argument(
+        "--auto-login",
+        action="store_true",
+        default=False,
+        help="Try to log in using platform credentials from .env.",
+    )
     a = p.parse_args(argv)
+    platform = _infer_platform(a.platform, a.channel_url, a.reel_url)
+    auto_login = (
+        a.auto_login
+        or _env_bool("REELS_AUTO_LOGIN")
+        or (_env_bool("TIKTOK_AUTO_LOGIN") if platform == "tiktok" else _env_bool("INSTAGRAM_AUTO_LOGIN"))
+    )
     return Config(
         debug=a.debug,
+        platform=platform,
         cdp_url=a.cdp_url,
         server_url=a.server_url,
         out_dir=a.out_dir,
@@ -119,5 +138,16 @@ def parse_args(argv: list[str] | None = None) -> Config:
         reel_url=a.reel_url.strip(),
         instagram_username=os.getenv("INSTAGRAM_USERNAME", ""),
         instagram_password=os.getenv("INSTAGRAM_PASSWORD", ""),
-        auto_login=a.auto_login,
+        tiktok_username=os.getenv("TIKTOK_USERNAME", ""),
+        tiktok_password=os.getenv("TIKTOK_PASSWORD", ""),
+        auto_login=auto_login,
     )
+
+
+def _infer_platform(default: str, channel_url: str, reel_url: str) -> str:
+    blob = f"{channel_url or ''} {reel_url or ''}".lower()
+    if "tiktok.com" in blob:
+        return "tiktok"
+    if "instagram.com" in blob:
+        return "instagram"
+    return default
