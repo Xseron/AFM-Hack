@@ -20,10 +20,10 @@ class ServerClient:
             return {"job_id": "debug", "duplicate": False, "near_duplicates": []}
 
         url = self.cfg.server_url.rstrip("/") + "/videos"
-        files = {"video": (f"{code}.webm", video, "video/webm")}
+        files = {"video": (f"{self.cfg.platform}_{code}.webm", video, "video/webm")}
         data = {
             "description": description,
-            "source_platform": "instagram",
+            "source_platform": self.cfg.platform,
             "source_url": meta.get("source_url", ""),
             "source_meta": json.dumps(meta, ensure_ascii=False),
         }

@@ -22,9 +22,14 @@ from pathlib import Path
 # The video checkers a reel is scored on; each gets its own scam threshold.
 CHECKERS = ("semantic", "ocr", "clip", "audio")
 
-# Where the bot looks for reels and which browser it attaches to over CDP.
-REELS_FEED_URL = "https://www.instagram.com/reels/"
+# Where the bot looks for videos and which browser it attaches to over CDP.
+PLATFORM_FEED_URLS = {
+    "instagram": "https://www.instagram.com/reels/",
+    "tiktok": "https://www.tiktok.com/foryou",
+}
+REELS_FEED_URL = PLATFORM_FEED_URLS["instagram"]
 DEFAULT_CHROME_PATH = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+PLATFORMS = tuple(PLATFORM_FEED_URLS)
 
 
 @dataclass
@@ -73,25 +78,29 @@ class ParserController:
         self._proc: subprocess.Popen | None = None
         self._browser_proc: subprocess.Popen | None = None
         self._channel: str = ""
+        self._platform: str = "instagram"
         self._started_at: float | None = None
         self._log_path = str(Path(self._parser_dir) / "parser_run.log")
 
-    def start(self, channel_url: str, max_reels: int | None = None) -> dict:
+    def start(self, channel_url: str, max_reels: int | None = None, platform: str = "instagram") -> dict:
         channel_url = (channel_url or "").strip()
         if not channel_url:
             raise ValueError("channel_url must not be empty")
-        return self._spawn(["--channel", channel_url], channel_url, max_reels=max_reels)
+        platform = self._normalize_platform(platform)
+        return self._spawn(["--channel", channel_url], channel_url, max_reels=max_reels, platform=platform)
 
-    def start_reel(self, reel_url: str) -> dict:
+    def start_reel(self, reel_url: str, platform: str = "instagram") -> dict:
         reel_url = (reel_url or "").strip()
         if not reel_url:
             raise ValueError("reel_url must not be empty")
-        return self._spawn(["--reel", reel_url], reel_url)
+        platform = self._normalize_platform(platform, source=reel_url)
+        return self._spawn(["--reel", reel_url], reel_url, platform=platform)
 
-    def start_feed(self, max_reels: int | None = None) -> dict:
-        """Ensure the CDP browser is up, then record from the global reels feed."""
-        browser = self.ensure_browser()
-        status = self._spawn([], "feed", max_reels=max_reels)
+    def start_feed(self, max_reels: int | None = None, platform: str = "instagram") -> dict:
+        """Ensure the CDP browser is up, then record from the selected feed."""
+        platform = self._normalize_platform(platform)
+        browser = self.ensure_browser(platform=platform)
+        status = self._spawn([], f"{platform} feed", max_reels=max_reels, platform=platform)
         status["browser_launched"] = browser.get("launched", False)
         return status
 
@@ -104,8 +113,9 @@ class ParserController:
         except Exception:  # noqa: BLE001
             return False
 
-    def ensure_browser(self) -> dict:
+    def ensure_browser(self, platform: str = "instagram") -> dict:
         """Launch Chrome with remote debugging if it isn't already reachable."""
+        platform = self._normalize_platform(platform)
         if self.cdp_reachable():
             return {"launched": False, "running": True}
         if not Path(self._chrome_path).exists():
@@ -117,7 +127,7 @@ class ParserController:
             self._chrome_path,
             f"--remote-debugging-port={self._cdp_port}",
             f"--user-data-dir={self._chrome_profile_dir}",
-            REELS_FEED_URL,
+            PLATFORM_FEED_URLS[platform],
         ]
         creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
         self._browser_proc = subprocess.Popen(cmd, creationflags=creationflags)
@@ -129,13 +139,20 @@ class ParserController:
             f"launched Chrome but its CDP endpoint never came up on port {self._cdp_port}"
         )
 
-    def _spawn(self, mode_args: list[str], label: str, max_reels: int | None = None) -> dict:
+    def _spawn(
+        self,
+        mode_args: list[str],
+        label: str,
+        max_reels: int | None = None,
+        platform: str = "instagram",
+    ) -> dict:
         with self._lock:
             if self._is_running():
                 raise RuntimeError("parser is already running; stop it first")
+            platform = self._normalize_platform(platform, source=" ".join(mode_args))
 
             cmd = [sys.executable, "-u", "-m", "reels_recorder",
-                   "--server-url", self._server_url, *mode_args]
+                   "--server-url", self._server_url, "--platform", platform, *mode_args]
             if max_reels:
                 cmd += ["--max-reels", str(max_reels)]
 
@@ -158,6 +175,7 @@ class ParserController:
                 preexec_fn=preexec_fn,
             )
             self._channel = label
+            self._platform = platform
             self._started_at = time.time()
             return self.status()
 
@@ -176,6 +194,7 @@ class ParserController:
         return {
             "running": running,
             "channel": self._channel if running else "",
+            "platform": self._platform if running else "",
             "pid": self._proc.pid if (running and self._proc) else None,
             "started_at": self._started_at if running else None,
             "browser_running": self.cdp_reachable() if check_browser else None,
@@ -185,6 +204,15 @@ class ParserController:
     # --- internals ---
     def _is_running(self) -> bool:
         return self._proc is not None and self._proc.poll() is None
+
+    def _normalize_platform(self, platform: str, source: str = "") -> str:
+        value = (platform or "").strip().lower()
+        blob = f"{value} {source or ''}".lower()
+        if "tiktok.com" in blob or value == "tiktok":
+            return "tiktok"
+        if "instagram.com" in blob or value in ("", "instagram"):
+            return "instagram"
+        raise ValueError(f"unsupported parser platform: {platform}")
 
     def _kill_tree(self, proc: subprocess.Popen) -> None:
         try:

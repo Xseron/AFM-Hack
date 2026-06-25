@@ -1,0 +1,7 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\30a75fe92e9842c08a6093364dbf1a7e\tiktok_945dbd61-6ed5-49ac-a38c-737ca955190a.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+И нещи с утра, фотография-кая
+Горят по с вами, а ты, бей!

@@ -47,6 +47,15 @@ def shortcode(page: Page) -> str | None:
     return None
 
 
+def code_from_url(url: str) -> str | None:
+    m = _SHORTCODE_RE.search(url or "")
+    return m.group(1) if m else None
+
+
+def video_url(code: str, handle: str = "") -> str:
+    return f"https://www.instagram.com/reel/{code}/"
+
+
 def caption(page: Page, code: str | None) -> str:
     """Best-effort caption text for the upload description (server needs it non-empty).
 

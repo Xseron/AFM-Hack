@@ -1,0 +1,6 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\5a4ebd83e9204028bbfb207cc2faa5e7\instagram_DX4kVaps8EE.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Я стала Южа Секреатром с нуля за 2 месяца.

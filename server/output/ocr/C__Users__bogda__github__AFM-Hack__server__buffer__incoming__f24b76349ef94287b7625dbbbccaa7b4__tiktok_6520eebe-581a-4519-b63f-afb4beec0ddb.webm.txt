@@ -1,0 +1,4 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\f24b76349ef94287b7625dbbbccaa7b4\tiktok_6520eebe-581a-4519-b63f-afb4beec0ddb.webm
+# frames_ocrd: 1
+
+

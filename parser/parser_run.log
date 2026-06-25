@@ -64,3 +64,29 @@
 [sent] DZpiTHcNb2c (765 KB)
 [done] reached max reels = 4
 [done] channel parsed: 4 reel(s) recorded
+
+=== start tiktok feed @ Thu Jun 25 08:26:14 2026 ===
+[LIVE] watching tiktok feed. server=http://localhost:8000  out=recordings
+[sent] 199cd299-86b6-46f2-a73f-57d6058872cb (4216 KB)
+[warn] empty clip for f33d6b67-3dc3-4ad4-bdd7-5ac1a3a8e590 (stream may be CORS-tainted); skipped upload
+[warn] could not start recording for a4d0d5a6-d2ed-434e-b2cf-8232f25ebba1; skipping
+[warn] could not start recording for b6da5ea6-6990-4df3-b260-9ecd2ba06d88; skipping
+
+=== start tiktok feed @ Thu Jun 25 08:39:56 2026 ===
+[LIVE] watching tiktok feed. server=http://localhost:8000  out=recordings
+[sent] 945dbd61-6ed5-49ac-a38c-737ca955190a (3742 KB)
+[sent] 0301edae-93b2-4210-95fe-4f08e3ac2376 (10424 KB)
+[sent] 0e27661c-7c10-40b2-9311-1047274c8c29 (24056 KB)
+[sent] 6520eebe-581a-4519-b63f-afb4beec0ddb (3693 KB)
+
+=== start instagram feed @ Thu Jun 25 08:42:47 2026 ===
+[LIVE] watching instagram feed. server=http://localhost:8000  out=recordings
+[sent] DY68a5QtLsX (1064 KB)
+[sent] DZ-oaJSMQqH (1889 KB)
+[sent] DX2q58VIkN2 (3178 KB)
+[sent] DW8pmMlDt-k (2811 KB)
+[sent] DZJ-yQ4sFvL (2861 KB)
+[sent] DX4kVaps8EE (6432 KB)
+[sent] DW_o_vmiD4U (14754 KB)
+[sent] DWqO4DMDbGw (4197 KB)
+[sent] DY44QrFtw6s (7147 KB)

@@ -118,8 +118,16 @@ class PipelineArchitecture:
             investigate_node.update(auto_scan.as_dict())
 
         stages = [
-            {"id": "parse", "label": "Parsing", "kind": "info",
-             "note": "Reels bot records video + caption and uploads to the server."},
+            {"id": "source", "label": "Sources", "kind": "platforms", "nodes": [
+                {"id": "instagram", "label": "Instagram Reels", "enabled": True,
+                 "url": "https://www.instagram.com/reels/",
+                 "note": "Records reels from feed, profile, or single reel URL."},
+                {"id": "tiktok", "label": "TikTok Videos", "enabled": True,
+                 "url": "https://www.tiktok.com/foryou",
+                 "note": "Records For You feed, profile videos, or single video URL."},
+            ]},
+            {"id": "parse", "label": "Parser", "kind": "info",
+             "note": "Browser recorder captures video + caption and uploads to the server."},
             {"id": "triage", "label": "Light recognizer", "kind": "pipelines", "nodes": triage_nodes},
             {"id": "priority", "label": "Priority queue", "kind": "info",
              "note": "Triage score orders jobs; higher-risk reels are analyzed first."},

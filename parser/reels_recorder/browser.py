@@ -6,7 +6,7 @@ import os
 
 from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 
-from .cli import Config, LOGIN_MARKERS, REELS_URL
+from .cli import Config, INSTAGRAM_REELS_URL, LOGIN_MARKERS, TIKTOK_FEED_URL
 
 
 class BrowserConnectError(RuntimeError):
@@ -30,7 +30,7 @@ def connect(cfg: Config):
         raise BrowserConnectError("Connected, but the browser has no open context/window.")
     context: BrowserContext = browser.contexts[0]
 
-    page = _pick_reels_page(context)
+    page = _pick_platform_page(context, cfg.platform)
     return pw, browser, context, page
 
 
@@ -45,15 +45,36 @@ def _pick_reels_page(context: BrowserContext) -> Page:
     return context.new_page()
 
 
+def _pick_platform_page(context: BrowserContext, platform: str) -> Page:
+    pages = list(context.pages)
+    domain = "tiktok.com" if platform == "tiktok" else "instagram.com"
+    for p in pages:
+        if domain in (p.url or ""):
+            return p
+    return _pick_reels_page(context)
+
+
 def ensure_reels_feed(page: Page, cfg: Config) -> None:
     """Navigate to the Reels feed if we are not already somewhere on instagram reels."""
     url = page.url or ""
     if "/reels" not in url and "/reel/" not in url:
-        page.goto(REELS_URL, wait_until="domcontentloaded")
+        page.goto(INSTAGRAM_REELS_URL, wait_until="domcontentloaded")
     page.wait_for_timeout(1500)
 
 
+def ensure_feed(page: Page, cfg: Config) -> None:
+    if cfg.platform == "tiktok":
+        url = page.url or ""
+        if "tiktok.com" not in url:
+            page.goto(TIKTOK_FEED_URL, wait_until="domcontentloaded")
+        page.wait_for_timeout(2000)
+        return
+    ensure_reels_feed(page, cfg)
+
+
 def login_if_needed(page: Page, cfg: Config) -> bool:
+    if cfg.platform == "tiktok":
+        return _tiktok_login_if_needed(page, cfg)
     if not is_logged_out(page):
         return True
     if not cfg.auto_login:
@@ -78,7 +99,7 @@ def login_if_needed(page: Page, cfg: Config) -> bool:
     for _ in range(60):
         page.wait_for_timeout(1000)
         if not is_logged_out(page):
-            page.goto(REELS_URL, wait_until="domcontentloaded")
+            page.goto(INSTAGRAM_REELS_URL, wait_until="domcontentloaded")
             page.wait_for_timeout(1500)
             return not is_logged_out(page)
 
@@ -96,9 +117,83 @@ def is_logged_out(page: Page) -> bool:
     return False
 
 
+def _tiktok_login_if_needed(page: Page, cfg: Config) -> bool:
+    # TikTok's public feed often works logged out. If a login wall appears and
+    # credentials are configured, make a best-effort login; otherwise continue so
+    # manual sessions and public browsing still work.
+    if not _tiktok_login_wall_visible(page):
+        return True
+    if not cfg.auto_login:
+        print("[error] TikTok login prompt visible. Log in manually in Chrome or rerun with --auto-login.")
+        return False
+    if not cfg.tiktok_username or not cfg.tiktok_password:
+        print("[error] TikTok login requested, but TIKTOK_USERNAME/TIKTOK_PASSWORD are missing.")
+        return False
+
+    page.goto("https://www.tiktok.com/login/phone-or-email/email", wait_until="domcontentloaded")
+    page.wait_for_timeout(2000)
+    try:
+        _fill_first(page, [
+            'input[name="username"]',
+            'input[autocomplete="username"]',
+            'input[type="text"]',
+            'input[type="email"]',
+        ], cfg.tiktok_username)
+        _fill_first(page, [
+            'input[type="password"]',
+            'input[autocomplete="current-password"]',
+        ], cfg.tiktok_password)
+        try:
+            page.get_by_role("button", name="Log in").click(timeout=5000)
+        except Exception:  # noqa: BLE001
+            page.locator('button[type="submit"]').click(timeout=5000)
+    except Exception as e:  # noqa: BLE001
+        print(f"[warn] could not submit TikTok login form: {e}")
+        return False
+
+    for _ in range(90):
+        page.wait_for_timeout(1000)
+        if not _tiktok_login_wall_visible(page):
+            page.goto(TIKTOK_FEED_URL, wait_until="domcontentloaded")
+            page.wait_for_timeout(2000)
+            return True
+
+    print("[error] TikTok still shows login/checkpoint. Complete verification in Chrome, then rerun the bot.")
+    return False
+
+
+def _fill_first(page: Page, selectors: list[str], value: str) -> None:
+    last_error: Exception | None = None
+    for sel in selectors:
+        try:
+            loc = page.locator(sel).first
+            loc.fill(value, timeout=5000)
+            return
+        except Exception as e:  # noqa: BLE001
+            last_error = e
+    raise RuntimeError(f"no login input found: {last_error}")
+
+
+def _tiktok_login_wall_visible(page: Page) -> bool:
+    try:
+        if "/login" in (page.url or ""):
+            return True
+        if "tiktok" in (page.url or "") and "\u0440\u0435\u0433\u0438\u0441\u0442\u0440\u0430\u0446\u0438\u044f" in page.title().lower():
+            return True
+        if page.locator('[data-e2e="login-modal"]').first.is_visible(timeout=500):
+            return True
+        if page.locator('input[type="password"]').first.is_visible(timeout=500):
+            return True
+        if page.get_by_role("button", name="Log in").first.is_visible(timeout=500):
+            return True
+    except Exception:  # noqa: BLE001
+        pass
+    return False
+
+
 def save_session(context: BrowserContext, cfg: Config) -> None:
     os.makedirs(cfg.state_dir, exist_ok=True)
-    path = os.path.join(cfg.state_dir, "instagram_session.json")
+    path = os.path.join(cfg.state_dir, f"{cfg.platform}_session.json")
     try:
         state = context.storage_state()
         with open(path, "w", encoding="utf-8") as f:

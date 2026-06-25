@@ -57,11 +57,11 @@ PAGE = """
     h2 { margin: 0 0 14px; font-size: 16px; }
     form { display: grid; gap: 12px; }
     label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; font-weight: 600; }
-    input, textarea, button {
+    input, textarea, select, button {
       font: inherit;
       border-radius: 6px;
     }
-    input, textarea {
+    input, textarea, select {
       width: 100%;
       border: 1px solid var(--line);
       padding: 10px 12px;
@@ -75,6 +75,7 @@ PAGE = """
       gap: 10px;
       align-items: end;
     }
+    .row.three { grid-template-columns: minmax(150px, 0.45fr) 1fr auto; }
     button {
       border: 0;
       background: var(--accent);
@@ -246,7 +247,7 @@ PAGE = """
     .weights-mini { font-size: 12px; color: var(--muted); line-height: 1.6; }
     @media (max-width: 760px) {
       .summary, .confidence-grid { grid-template-columns: 1fr 1fr; }
-      .row { grid-template-columns: 1fr; }
+      .row, .row.three { grid-template-columns: 1fr; }
       button { width: 100%; }
     }
   </style>
@@ -281,10 +282,16 @@ PAGE = """
 
     <section>
       <h2>Parse Channel</h2>
-      <p class="status">Point the parser-bot at an Instagram profile to record and check its reels. Requires the anti-detect browser running with CDP and a logged-in session.</p>
+      <p class="status">Point the parser-bot at an Instagram or TikTok profile to record and check its videos. Requires Chrome with CDP; TikTok can use a manual or env-driven login session.</p>
       <form id="parserForm">
+        <label>Platform
+          <select id="channelPlatform" name="platform">
+            <option value="instagram">Instagram Reels</option>
+            <option value="tiktok">TikTok Videos</option>
+          </select>
+        </label>
         <label>Channel URL or handle
-          <input id="channelUrl" name="channel_url" placeholder="https://www.instagram.com/username/  or  @username">
+          <input id="channelUrl" name="channel_url" placeholder="https://www.instagram.com/username/  or  https://www.tiktok.com/@username">
         </label>
         <div class="row">
           <label>Max reels
@@ -301,8 +308,14 @@ PAGE = """
 
     <section>
       <h2>Browse Global Feed</h2>
-      <p class="status">Launches Chrome with remote debugging (if it isn't already running) and records reels from your home feed. Use <em>Stop</em> above to halt.</p>
-      <div class="row">
+      <p class="status">Launches Chrome with remote debugging (if it isn't already running) and records videos from the selected feed. Use <em>Stop</em> above to halt.</p>
+      <div class="row three">
+        <label>Platform
+          <select id="feedPlatform" name="feed_platform">
+            <option value="instagram">Instagram Reels</option>
+            <option value="tiktok">TikTok For You</option>
+          </select>
+        </label>
         <label>Max reels
           <input id="feedMaxReels" name="feed_max_reels" type="number" min="1" placeholder="unlimited">
         </label>
@@ -312,14 +325,20 @@ PAGE = """
     </section>
 
     <section>
-      <h2>Check a Reel</h2>
-      <p class="status">Record and check a single reel by its link.</p>
+      <h2>Check a Video</h2>
+      <p class="status">Record and check a single Instagram reel or TikTok video by its link.</p>
       <form id="reelForm">
+        <label>Platform
+          <select id="reelPlatform" name="reel_platform">
+            <option value="instagram">Instagram Reels</option>
+            <option value="tiktok">TikTok Videos</option>
+          </select>
+        </label>
         <div class="row">
-          <label>Reel URL
-            <input id="reelUrl" name="reel_url" placeholder="https://www.instagram.com/reel/XXXXXXXXXXX/">
+          <label>Video URL
+            <input id="reelUrl" name="reel_url" placeholder="https://www.instagram.com/reel/XXXXXXXXXXX/ or https://www.tiktok.com/@user/video/123">
           </label>
-          <button id="checkReelBtn" type="submit">Check Reel</button>
+          <button id="checkReelBtn" type="submit">Check Video</button>
         </div>
         <div id="reelStatus" class="status"></div>
       </form>
@@ -656,7 +675,8 @@ PAGE = """
       const el = $("parserStatus");
       if (s && s.running) {
         const since = s.started_at ? new Date(s.started_at * 1000).toLocaleTimeString() : "";
-        el.textContent = `Running — ${s.channel} (pid ${s.pid}${since ? ", since " + since : ""}).`;
+        const platform = s.platform ? `${s.platform} ` : "";
+        el.textContent = `Running — ${platform}${s.channel} (pid ${s.pid}${since ? ", since " + since : ""}).`;
         el.className = "status warn";
         $("startParserBtn").disabled = true;
         $("stopParserBtn").disabled = false;
@@ -684,7 +704,7 @@ PAGE = """
       $("feedStatus").textContent = "Starting Chrome and reels recorder...";
       try {
         const max = parseInt($("feedMaxReels").value, 10);
-        const body = {};
+        const body = { platform: $("feedPlatform").value };
         if (!Number.isNaN(max) && max > 0) body.max_reels = max;
         const res = await fetch("/parser/feed", {
           method: "POST",
@@ -715,7 +735,7 @@ PAGE = """
       $("startParserBtn").disabled = true;
       try {
         const max = parseInt($("maxReels").value, 10);
-        const body = { channel_url: channel };
+        const body = { channel_url: channel, platform: $("channelPlatform").value };
         if (!Number.isNaN(max) && max > 0) body.max_reels = max;
         const res = await fetch("/parser/start", {
           method: "POST",
@@ -751,7 +771,7 @@ PAGE = """
     $("reelForm").addEventListener("submit", async (event) => {
       event.preventDefault();
       const url = $("reelUrl").value.trim();
-      if (!url) { $("reelStatus").textContent = "Paste a reel URL."; return; }
+      if (!url) { $("reelStatus").textContent = "Paste a video URL."; return; }
       $("checkReelBtn").disabled = true;
       $("reelStatus").className = "status";
       $("reelStatus").textContent = "Starting reel check...";
@@ -759,13 +779,13 @@ PAGE = """
         const res = await fetch("/parser/reel", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reel_url: url }),
+          body: JSON.stringify({ reel_url: url, platform: $("reelPlatform").value }),
         });
         if (!res.ok) {
           const detail = await res.json().catch(() => ({}));
           throw new Error(detail.detail || (await res.text()));
         }
-        $("reelStatus").textContent = "Reel check started; it will appear in Recent Reels once analyzed.";
+        $("reelStatus").textContent = "Video check started; it will appear in Recent Reels once analyzed.";
         renderParserStatus(await res.json());
       } catch (err) {
         $("reelStatus").textContent = err.message || String(err);
@@ -1023,6 +1043,14 @@ PAGE = """
       </div>`;
     }
 
+    function platformNodeHtml(n) {
+      return `<div class="node">
+        <div class="node-title">${escapeHtml(n.label)}</div>
+        <div class="node-badges"><span class="badge">source</span><span class="badge">${n.enabled ? "enabled" : "disabled"}</span></div>
+        <div class="weights-mini">${escapeHtml(n.note || n.url || "")}</div>
+      </div>`;
+    }
+
     function aggregateNodeHtml(n) {
       return `<div class="node">
         <div class="node-title">Aggregator</div>
@@ -1049,6 +1077,7 @@ PAGE = """
     function stageColHtml(stage) {
       let body = "";
       if (stage.kind === "info") body = `<div class="node node-info">${escapeHtml(stage.note || "")}</div>`;
+      else if (stage.kind === "platforms") body = (stage.nodes || []).map(platformNodeHtml).join("");
       else if (stage.kind === "pipelines") body = (stage.nodes || []).map(pipelineNodeHtml).join("") || `<div class="node node-info">none</div>`;
       else if (stage.kind === "aggregate") body = aggregateNodeHtml((stage.nodes || [])[0] || {});
       else if (stage.kind === "investigate") body = investigateNodeHtml((stage.nodes || [])[0] || {});
@@ -1462,6 +1491,19 @@ ARCHITECTURE_PAGE = """
       return nodeShell({ stage_id: stageId }, inner, n.enabled ? "" : "off");
     }
 
+    function platformNodeHtml(n, stageId) {
+      const inner = `
+        <div class="node-top">
+          <div class="node-icon">${escapeHtml((n.label || n.id || "?").slice(0, 2).toUpperCase())}</div>
+          <div>
+            <div class="node-title">${escapeHtml(n.label)}</div>
+            <div class="badges"><span class="badge">source</span><span class="badge">${n.enabled ? "enabled" : "disabled"}</span></div>
+          </div>
+        </div>
+        <div class="node-note">${escapeHtml(n.note || n.url || "")}</div>`;
+      return nodeShell({ stage_id: stageId }, inner, n.enabled ? "" : "off");
+    }
+
     function aggregateNodeHtml(n, stageId) {
       const inner = `
         <div class="node-top">
@@ -1489,6 +1531,7 @@ ARCHITECTURE_PAGE = """
     function stageHtml(stage) {
       let body = "";
       if (stage.kind === "info") body = infoNode(stage);
+      else if (stage.kind === "platforms") body = (stage.nodes || []).map((n) => platformNodeHtml(n, stage.id)).join("");
       else if (stage.kind === "pipelines") body = (stage.nodes || []).map((n) => pipelineNodeHtml(n, stage.id)).join("") || infoNode({ ...stage, note: "No nodes registered." });
       else if (stage.kind === "aggregate") body = aggregateNodeHtml((stage.nodes || [])[0] || {}, stage.id);
       else if (stage.kind === "investigate") body = investigateNodeHtml((stage.nodes || [])[0] || {}, stage.id);

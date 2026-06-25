@@ -1,0 +1,9 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\7f560bdbc08346ec933e2116fe610f9f\tiktok_0301edae-93b2-4210-95fe-4f08e3ac2376.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Обожаю, не помада, ко мне меня тоже
+Тайсты раз, ко кизу и бекут, мурашки, пакозы
+А на меня люблю, тебе верю и позже
+А на меня люблю, а на меня

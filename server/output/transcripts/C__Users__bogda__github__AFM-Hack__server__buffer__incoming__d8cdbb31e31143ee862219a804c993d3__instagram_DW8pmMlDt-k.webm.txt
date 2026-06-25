@@ -1,0 +1,6 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\d8cdbb31e31143ee862219a804c993d3\instagram_DW8pmMlDt-k.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Сколько денег тебе надо, чтобы решить все своей жизни?
