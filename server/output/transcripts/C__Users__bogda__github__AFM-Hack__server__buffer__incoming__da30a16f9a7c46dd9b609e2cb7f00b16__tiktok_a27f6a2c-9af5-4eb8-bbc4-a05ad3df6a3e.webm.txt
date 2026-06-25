@@ -1,0 +1,8 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\da30a16f9a7c46dd9b609e2cb7f00b16\tiktok_a27f6a2c-9af5-4eb8-bbc4-a05ad3df6a3e.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Облажаю не помадок, а не меня тоже.
+Тайсты раз как нижу, и бегут мурашки,
+Покозы, а на меня любят.

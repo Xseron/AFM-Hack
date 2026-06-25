@@ -1,4 +1,4 @@
-INFO:     127.0.0.1:52972 - "GET / HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52972 - "GET /architecture-ui HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52979 - "GET / HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52979 - "GET /architecture-ui HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58641 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58641 - "GET /architecture-ui HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50465 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50465 - "GET /architecture-ui HTTP/1.1" 200 OK

@@ -1,0 +1,6 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\aab9d7b822f240b58ab403a2a9c17bba\instagram_DL0NMv9sDXq.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+немного раскрутился.
