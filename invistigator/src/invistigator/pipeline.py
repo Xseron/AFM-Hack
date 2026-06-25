@@ -1,9 +1,10 @@
 import logging
 from typing import Callable
 
+from invistigator import osint
 from invistigator.config import Settings
 from invistigator.scraper import BanSignal
-from invistigator.storage import append_row, download_photo
+from invistigator.storage import append_jsonl, append_row, download_photo
 from invistigator.trigger import post_channels
 
 logger = logging.getLogger(__name__)
@@ -25,11 +26,15 @@ class Pipeline:
                 proxy=self.settings.http_proxy,
             )
 
+        if self.settings.osint_enabled:
+            profile.osint = osint.enrich(profile, self.settings)
+
         if profile.telegram_links:
             ok = post_channels(profile.telegram_links, self.settings.crawler_url)
             profile.tg_triggered = "yes" if ok else "error"
 
         append_row(profile, self.settings.csv_path)
+        append_jsonl(profile, self.settings.jsonl_path)
         if sink is not None:
             sink.append(profile)
         logger.info(

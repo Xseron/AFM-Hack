@@ -4,8 +4,10 @@ import uuid
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 
 from invistigator.config import Settings, get_settings
+from invistigator.graph import build_graph
 from invistigator.pipeline import Pipeline
-from invistigator.schemas import AcceptedResponse, AnalyzeRequest, JobStatus
+from invistigator.schemas import AcceptedResponse, AnalyzeRequest, GraphData, JobStatus
+from invistigator.storage import read_jsonl
 
 
 def make_scraper_factory(settings: Settings):
@@ -43,6 +45,11 @@ def create_app(pipeline: Pipeline | None = None) -> FastAPI:
     @app.get("/health")
     def health():
         return {"status": "ok"}
+
+    @app.get("/graph", response_model=GraphData)
+    def graph(min_shared: int = 2):
+        profiles = read_jsonl(get_settings().jsonl_path)
+        return build_graph(profiles, min_shared=min_shared)
 
     @app.post("/accounts", response_model=AcceptedResponse)
     def accounts(req: AnalyzeRequest, background: BackgroundTasks):

@@ -52,7 +52,7 @@ server/app/static/
 
 ### Server changes
 
-1. **Mount static files.** In `create_app()` (`server/app/api/main.py`):
+1. **Mount static files.** In `create_app()` (`server/app/main.py`):
    serve `server/app/static/` and return `index.html` at `/`.
    - The current `ui.py` `PAGE`/`ARCHITECTURE_PAGE` strings are removed; the
      `ui` router either becomes a thin redirect/index handler or is dropped in

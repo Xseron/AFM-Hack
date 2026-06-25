@@ -19,8 +19,21 @@ uvicorn invistigator.api:get_app --factory --reload --port 8010
 
 ## API
 - `POST /accounts` `{"usernames": ["nasa", "some_casino_kz"]}` → `{"job_id", "accepted"}`
-  (скрейпинг идёт в фоне, результаты дозаписываются в `CSV_PATH`)
+  (скрейпинг идёт в фоне, результаты дозаписываются в `CSV_PATH` и `JSONL_PATH`)
+- `GET /graph?min_shared=2` → граф связей (nodes/edges JSON) по накопленным
+  результатам: связывает аккаунты по общим домену/телефону/кошельку/аватарке/
+  кросс-платформенному username. `min_shared` — мин. число аккаунтов на атрибут.
 - `GET /health`
+
+## OSINT
+По каждому профилю собираются открытые сигналы (всё бесплатно, без ключей):
+- **контакты** из bio: телефоны, email, WhatsApp, крипто-кошельки, ссылки на др. соцсети;
+- **домен** из link-in-bio: финальный URL после редиректов, возраст домена (WHOIS), nameservers, заголовок страницы;
+- **username** на TikTok/VK/X/YouTube/GitHub/Facebook/OK/Telegram (best-effort);
+- **аватарка**: pHash (детект переиспользования) + ссылка на reverse-search.
+
+Управление: `OSINT_ENABLED`, `OSINT_TIMEOUT_SEC`, `USERNAME_SEARCH_PLATFORMS` в `.env`.
+Результаты дублируются в `JSONL_PATH` (источник для графа `GET /graph`).
 
 ## Анти-бан
 - Логин **один раз** через `scripts/login.py`, дальше переиспользуется сессия.

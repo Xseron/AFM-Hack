@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     csv_path: str = "results.csv"
     media_dir: str = "media"
 
+    # OSINT-обогащение
+    osint_enabled: bool = True
+    osint_timeout_sec: int = 8
+    username_search_platforms: str | None = None  # CSV-переопределение списка платформ
+    jsonl_path: str = "results.jsonl"             # полные результаты (источник для графа)
+
 
 @lru_cache
 def get_settings() -> Settings:
