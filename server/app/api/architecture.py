@@ -11,11 +11,11 @@ router = APIRouter(prefix="/architecture")
 
 class NodeUpdate(BaseModel):
     enabled: bool | None = None
-    weight: float | None = None
+    threshold: float | None = None
 
 
 class AggregateUpdate(BaseModel):
-    category_threshold: float
+    default_threshold: float
 
 
 @router.get("")
@@ -26,7 +26,7 @@ async def get_architecture(components=Depends(get_components)) -> dict:
 @router.post("/node/{node_id}")
 async def update_node(node_id: str, body: NodeUpdate, components=Depends(get_components)) -> dict:
     try:
-        node = components.architecture.set_node(node_id, enabled=body.enabled, weight=body.weight)
+        node = components.architecture.set_node(node_id, enabled=body.enabled, threshold=body.threshold)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"unknown node: {node_id}") from exc
     return node
@@ -43,8 +43,8 @@ async def delete_node(node_id: str, components=Depends(get_components)) -> dict:
 
 @router.post("/aggregate")
 async def update_aggregate(body: AggregateUpdate, components=Depends(get_components)) -> dict:
-    threshold = components.architecture.set_category_threshold(body.category_threshold)
-    return {"category_threshold": threshold}
+    threshold = components.architecture.set_default_threshold(body.default_threshold)
+    return {"default_threshold": threshold}
 
 
 @router.post("/reload")

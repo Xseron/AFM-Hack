@@ -61,10 +61,19 @@ async def test_ui_served(app_client):
     resp = await client.get("/")
     assert resp.status_code == 200
     assert "Upload and Check" in resp.text
+    assert "/architecture-ui" in resp.text
     assert "Clear Dedup" in resp.text
     assert "Priority List" in resp.text
     assert "Recent Reels" in resp.text
     assert "Description" in resp.text
+
+
+async def test_architecture_ui_served(app_client):
+    client, _ = app_client
+    resp = await client.get("/architecture-ui")
+    assert resp.status_code == 200
+    assert "Pipeline Architecture" in resp.text
+    assert "Reload plugins" in resp.text
 
 
 async def test_priority_list_includes_method_confidences(app_client):
@@ -97,6 +106,7 @@ async def test_priority_list_includes_method_confidences(app_client):
         "clip": 0.0,
         "audio": 0.0,
     }
+    assert item["scanner_confidences"] == {}
 
 
 async def test_recent_jobs_sorted_newest_first_with_scores(app_client):
@@ -131,6 +141,7 @@ async def test_recent_jobs_sorted_newest_first_with_scores(app_client):
     assert items[0]["source"]["permalink"] == "https://www.instagram.com/reel/second/"
     assert items[0]["description"] == "second"
     assert set(items[0]["method_confidences"]) == {"semantic", "ocr", "clip", "audio"}
+    assert "scanner_confidences" in items[0]
     assert items[0]["created_at"]
 
 

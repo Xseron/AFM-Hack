@@ -27,16 +27,19 @@ PIPELINE = MyChecker()
 ```
 
 - `modality` decides which dashboard column the score feeds
-  (`triage`/`text` → Semantic, `ocr` → OCR, `visual` → CLIP, `audio` → Audio)
-  and which aggregator weight applies.
+  (`triage`/`text` → Semantic, `ocr` → OCR, `visual` → CLIP, `audio` → Audio).
+  A custom modality (e.g. `deepfake`) is fine — it just won't map to one of the
+  four dashboard columns, but it still appears as a node and in the findings.
 - Files starting with `_` are ignored (use that for templates — see
-  `_example_template.py`).
+  `_example_template.py`). `deepfake_detector.py` is a shipped example scanner.
 - An import/format error is shown on the node instead of crashing startup.
 
-## Editing from the UI
+## Detection rule & editing from the UI
 
-On the *Pipeline* tab each node can be toggled on/off, have its modality weight
-retuned, and (for plugins) be removed from the running pipeline. The aggregator's
-category threshold and the per-checker auto-investigate thresholds are editable
-there too. These edits are live but in-memory; set `MW_*` env vars for the
-defaults applied at startup.
+A reel is flagged **scam** when **any** checker's confidence reaches that
+checker's **threshold** (`confidence >= threshold`). On the *Pipeline* tab each
+node can be toggled on/off, have its scam threshold set, and (for plugins) be
+removed from the running pipeline. The Aggregator node sets the default
+threshold for checkers without an explicit one; the Investigator node tunes the
+per-checker auto-scan thresholds. These edits are live but in-memory; set `MW_*`
+env vars (e.g. `MW_SCAM_THRESHOLD`) for the defaults applied at startup.

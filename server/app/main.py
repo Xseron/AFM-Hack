@@ -54,6 +54,9 @@ def build_components(settings: Settings) -> Components:
     else:
         registry = build_registry(settings.enabled_pipeline_list or None)
 
+    from app.pipelines import aggregator
+    aggregator.DEFAULT_THRESHOLD = settings.scam_threshold  # startup default scam threshold
+
     arch = PipelineArchitecture(registry, settings.pipeline_plugins_dir)
     arch.reload_plugins()  # hot-load any checker plugins into the live registry
 
@@ -69,6 +72,9 @@ def build_components(settings: Settings) -> Components:
         parser=ParserController(
             parser_dir=settings.parser_dir,
             server_url=settings.parser_server_url,
+            chrome_path=settings.parser_chrome_path,
+            cdp_port=settings.parser_cdp_port,
+            chrome_profile_dir=settings.parser_chrome_profile_dir,
         ),
         auto_scan=AutoScanState(
             enabled=settings.auto_scan_enabled,

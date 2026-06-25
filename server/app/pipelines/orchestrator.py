@@ -24,9 +24,13 @@ async def run_triage(
     findings: list[Finding] = []
     for pipeline in registry.triage_pipelines():
         try:
-            findings.extend(await pipeline.process(ctx, text_unit))
+            produced = await pipeline.process(ctx, text_unit)
         except Exception as exc:  # one pipeline must not kill triage
             log.warning("triage pipeline %s failed: %s", getattr(pipeline, "name", "?"), exc)
+            continue
+        for f in produced:
+            f.evidence.setdefault("_pipeline", pipeline.name)
+        findings.extend(produced)
     priority = min(1.0, sum(f.confidence for f in findings))
     return priority, findings
 
@@ -56,6 +60,8 @@ async def run_analysis(
         except Exception as exc:  # one model must not fail the whole job
             log.warning("analysis pipeline %s failed: %s", getattr(pipeline, "name", "?"), exc)
             continue
+        for f in pipeline_findings:
+            f.evidence.setdefault("_pipeline", pipeline.name)
         all_findings.extend(pipeline_findings)
         if exp is not None:
             explanations.append(exp)

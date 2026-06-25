@@ -195,6 +195,14 @@ PAGE = """
     }
     .tab:hover { background: none; color: var(--text); }
     .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tabs a {
+      color: var(--muted);
+      text-decoration: none;
+      padding: 8px 14px;
+      font-weight: 700;
+      border-bottom: 2px solid transparent;
+    }
+    .tabs a:hover { color: var(--text); }
     .tabpane { display: grid; gap: 18px; }
     /* ---- pipeline flow graph ---- */
     .flow {
@@ -250,7 +258,7 @@ PAGE = """
   <main>
     <nav class="tabs">
       <button id="tabDashboardBtn" type="button" class="tab active" data-tab="dashboard">Dashboard</button>
-      <button id="tabPipelineBtn" type="button" class="tab" data-tab="pipeline">Pipeline</button>
+      <a href="/architecture-ui">Architecture</a>
     </nav>
 
     <div id="tab-dashboard" class="tabpane">
@@ -289,6 +297,18 @@ PAGE = """
         </div>
         <div id="parserStatus" class="status">Checking parser status...</div>
       </form>
+    </section>
+
+    <section>
+      <h2>Browse Global Feed</h2>
+      <p class="status">Launches Chrome with remote debugging (if it isn't already running) and records reels from your home feed. Use <em>Stop</em> above to halt.</p>
+      <div class="row">
+        <label>Max reels
+          <input id="feedMaxReels" name="feed_max_reels" type="number" min="1" placeholder="unlimited">
+        </label>
+        <button id="startFeedBtn" type="button">Start Feed Parsing</button>
+      </div>
+      <div id="feedStatus" class="status"></div>
     </section>
 
     <section>
@@ -355,12 +375,7 @@ PAGE = """
         <div class="metric"><span>Source URL</span><strong id="sourceUrl">-</strong></div>
         <div class="metric"><span>Description</span><strong id="sourceDescription">-</strong></div>
       </div>
-      <div class="confidence-grid">
-        <div class="metric"><span>Semantic</span><strong id="semanticConfidence">-</strong></div>
-        <div class="metric"><span>OCR</span><strong id="ocrConfidence">-</strong></div>
-        <div class="metric"><span>CLIP</span><strong id="clipConfidence">-</strong></div>
-        <div class="metric"><span>Audio</span><strong id="audioConfidence">-</strong></div>
-      </div>
+      <div id="confidenceGrid" class="confidence-grid"></div>
       <table>
         <thead><tr><th>Modality</th><th>Signal</th><th>Confidence</th><th>Evidence</th></tr></thead>
         <tbody id="findings"><tr><td colspan="4">No result loaded.</td></tr></tbody>
@@ -370,16 +385,16 @@ PAGE = """
     <section>
       <h2>Priority List</h2>
       <table>
-        <thead><tr><th>Reel</th><th>Description</th><th>Status</th><th>Priority</th><th>Risk</th><th>Category</th><th>Semantic</th><th>OCR</th><th>CLIP</th><th>Audio</th><th>Job</th></tr></thead>
-        <tbody id="priorityList"><tr><td colspan="11">No priority data loaded.</td></tr></tbody>
+        <thead id="priorityHead"></thead>
+        <tbody id="priorityList"><tr><td>No priority data loaded.</td></tr></tbody>
       </table>
     </section>
 
     <section>
       <h2>Recent Reels</h2>
       <table>
-        <thead><tr><th>Time</th><th>Reel</th><th>Description</th><th>Status</th><th>Semantic</th><th>OCR</th><th>CLIP</th><th>Audio</th><th>Risk</th><th>Category</th><th>Job</th></tr></thead>
-        <tbody id="recentJobs"><tr><td colspan="11">No recent jobs loaded.</td></tr></tbody>
+        <thead id="recentHead"></thead>
+        <tbody id="recentJobs"><tr><td>No recent jobs loaded.</td></tr></tbody>
       </table>
     </section>
 
@@ -398,7 +413,7 @@ PAGE = """
     <div id="tab-pipeline" class="tabpane" hidden>
       <section>
         <h2>Pipeline Architecture</h2>
-        <p class="status">The flow each reel runs through, left to right. Toggle a checker on/off, retune its weight, set the aggregator's fraud threshold, or tune the investigator. Drop a <code>.py</code> checker in the plugins folder and press <em>Reload plugins</em> to add a new node — see <code>plugins/README.md</code> for the format.</p>
+        <p class="status">The flow each reel runs through, left to right. A reel is flagged scam when any checker's confidence reaches its threshold. Toggle a checker on/off, set its scam threshold, change the default threshold on the Aggregator, or tune the investigator. Drop a <code>.py</code> checker in the plugins folder and press <em>Reload plugins</em> to add a new node — see <code>plugins/README.md</code> for the format.</p>
         <div class="actions">
           <button id="reloadPluginsBtn" type="button" class="secondary">Reload plugins</button>
           <span id="pluginsDir" class="status"></span>
@@ -420,6 +435,14 @@ PAGE = """
     let recentShown = PAGE_INIT;
     let priorityItems = [];
     let recentItems = [];
+    let currentJob = null;
+    let scannerColumns = [
+      { id: "text_nlp", label: "Semantic", checker: "semantic" },
+      { id: "ocr_text", label: "OCR", checker: "ocr" },
+      { id: "visual_cv", label: "CLIP", checker: "clip" },
+      { id: "audio_asr", label: "Audio", checker: "audio" },
+    ];
+    let knownScannerIds = new Set(scannerColumns.map((c) => c.id));
     const expandedDesc = new Set();
 
     function setStatus(message, isError = false) {
@@ -428,15 +451,25 @@ PAGE = """
     }
 
     function setResult(job) {
+      currentJob = job;
       $("jobId").textContent = job.job_id || "-";
       $("jobStatus").textContent = job.status || "-";
       $("riskScore").textContent = typeof job.risk_score === "number" ? job.risk_score.toFixed(3) : "-";
       $("category").textContent = job.category || "-";
       $("category").className = job.category && job.category !== "clean" ? "risk" : "clean";
-      setConfidenceMetrics(job.method_confidences || {});
+      setConfidenceMetrics(job);
       setSource(job.source || {}, job.description || "");
+      renderFindings(job);
+    }
 
-      const rows = (job.findings || []).map((f) => `
+    function findingVisible(f) {
+      const pipeline = f.evidence && f.evidence._pipeline;
+      if (!pipeline || !knownScannerIds.has(pipeline)) return true;
+      return scannerColumns.some((c) => c.id === pipeline);
+    }
+
+    function renderFindings(job) {
+      const rows = (job.findings || []).filter(findingVisible).map((f) => `
         <tr>
           <td>${escapeHtml(f.modality || "")}</td>
           <td>${escapeHtml(f.signal_type || "")}</td>
@@ -462,11 +495,64 @@ PAGE = """
       return typeof value === "number" ? value.toFixed(3) : "-";
     }
 
-    function setConfidenceMetrics(conf) {
-      $("semanticConfidence").textContent = formatConfidence(conf.semantic);
-      $("ocrConfidence").textContent = formatConfidence(conf.ocr);
-      $("clipConfidence").textContent = formatConfidence(conf.clip);
-      $("audioConfidence").textContent = formatConfidence(conf.audio);
+    function confidenceFor(item, column) {
+      const scanner = item.scanner_confidences || {};
+      if (typeof scanner[column.id] === "number") return scanner[column.id];
+      const legacy = item.method_confidences || {};
+      if (column.checker && typeof legacy[column.checker] === "number") return legacy[column.checker];
+      return undefined;
+    }
+
+    function setConfidenceMetrics(job) {
+      const cols = scannerColumns.filter((c) => c.enabled !== false);
+      $("confidenceGrid").innerHTML = cols.length
+        ? cols.map((c) => `<div class="metric"><span>${escapeHtml(c.label)}</span><strong>${formatConfidence(confidenceFor(job || {}, c))}</strong></div>`).join("")
+        : "<div class='metric'><span>Scanners</span><strong>-</strong></div>";
+    }
+
+    function scannerHeaderCells() {
+      return scannerColumns.map((c) => `<th>${escapeHtml(c.label)}</th>`).join("");
+    }
+
+    function scannerValueCells(item) {
+      return scannerColumns.map((c) => `<td>${formatConfidence(confidenceFor(item, c))}</td>`).join("");
+    }
+
+    function tableCols() {
+      return 7 + scannerColumns.length;
+    }
+
+    function renderTableHeads() {
+      $("priorityHead").innerHTML = `<tr><th>Reel</th><th>Description</th><th>Status</th><th>Priority</th><th>Risk</th><th>Category</th>${scannerHeaderCells()}<th>Job</th></tr>`;
+      $("recentHead").innerHTML = `<tr><th>Time</th><th>Reel</th><th>Description</th><th>Status</th>${scannerHeaderCells()}<th>Risk</th><th>Category</th><th>Job</th></tr>`;
+    }
+
+    async function loadScannerColumns() {
+      try {
+        const res = await fetch("/architecture");
+        if (!res.ok) return;
+        const data = await res.json();
+        const scannerStage = (data.stages || []).find((s) => s.id === "scanner");
+        const nodes = scannerStage ? (scannerStage.nodes || []) : [];
+        knownScannerIds = new Set(nodes.filter((n) => !n.error).map((n) => n.id));
+        scannerColumns = nodes
+          .filter((n) => n.enabled && !n.error)
+          .map((n) => ({
+            id: n.id,
+            label: n.label || n.id,
+            checker: n.checker || "",
+            enabled: true,
+          }));
+        renderTableHeads();
+        if (currentJob) {
+          setConfidenceMetrics(currentJob);
+          renderFindings(currentJob);
+        } else {
+          setConfidenceMetrics({});
+        }
+        renderPriority();
+        renderRecent();
+      } catch (_) {}
     }
 
     function escapeHtml(value) {
@@ -575,11 +661,13 @@ PAGE = """
         $("startParserBtn").disabled = true;
         $("stopParserBtn").disabled = false;
       } else {
-        el.textContent = "Parser idle.";
+        const browser = s && s.browser_running ? " Browser ready." : " Browser not running (will launch on start).";
+        el.textContent = "Parser idle." + browser;
         el.className = "status";
         $("startParserBtn").disabled = false;
         $("stopParserBtn").disabled = true;
       }
+      if ($("startFeedBtn")) $("startFeedBtn").disabled = !!(s && s.running);
     }
 
     async function loadParserStatus() {
@@ -589,6 +677,36 @@ PAGE = """
         renderParserStatus(await res.json());
       } catch (_) {}
     }
+
+    $("startFeedBtn").addEventListener("click", async () => {
+      $("startFeedBtn").disabled = true;
+      $("feedStatus").className = "status";
+      $("feedStatus").textContent = "Starting Chrome and reels recorder...";
+      try {
+        const max = parseInt($("feedMaxReels").value, 10);
+        const body = {};
+        if (!Number.isNaN(max) && max > 0) body.max_reels = max;
+        const res = await fetch("/parser/feed", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const detail = await res.json().catch(() => ({}));
+          throw new Error(detail.detail || (await res.text()));
+        }
+        const status = await res.json();
+        renderParserStatus(status);
+        $("feedStatus").textContent = status.browser_launched
+          ? "Chrome launched; feed parsing is running."
+          : "Chrome was already ready; feed parsing is running.";
+        $("feedStatus").className = "status clean";
+      } catch (err) {
+        $("feedStatus").textContent = err.message || String(err);
+        $("feedStatus").className = "status risk";
+        $("startFeedBtn").disabled = false;
+      }
+    });
 
     $("parserForm").addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -761,9 +879,9 @@ PAGE = """
     }
 
     function renderPriority() {
+      renderTableHeads();
       const items = priorityItems;
       const rows = items.slice(0, priorityShown).map((item) => {
-        const c = item.method_confidences || {};
         return `
           <tr>
             <td>${reelLink(item.source || {})}</td>
@@ -772,17 +890,14 @@ PAGE = """
             <td>${formatConfidence(item.priority)}</td>
             <td>${formatConfidence(item.risk_score)}</td>
             <td>${escapeHtml(item.category || "-")}</td>
-            <td>${formatConfidence(c.semantic)}</td>
-            <td>${formatConfidence(c.ocr)}</td>
-            <td>${formatConfidence(c.clip)}</td>
-            <td>${formatConfidence(c.audio)}</td>
+            ${scannerValueCells(item)}
             <td>${escapeHtml(item.job_id || "")}</td>
           </tr>
         `;
       });
       $("priorityList").innerHTML = items.length
-        ? rows.join("") + moreRow(items.length, priorityShown, "priority", 11)
-        : "<tr><td colspan='11'>No jobs yet.</td></tr>";
+        ? rows.join("") + moreRow(items.length, priorityShown, "priority", tableCols())
+        : `<tr><td colspan='${tableCols()}'>No jobs yet.</td></tr>`;
     }
 
     async function loadPriorityList() {
@@ -810,19 +925,16 @@ PAGE = """
     }
 
     function renderRecent() {
+      renderTableHeads();
       const items = recentItems;
       const rows = items.slice(0, recentShown).map((item) => {
-        const c = item.method_confidences || {};
         return `
           <tr>
             <td>${formatTime(item.created_at)}</td>
             <td>${reelLink(item.source || {})}</td>
             ${descCell(item)}
             <td>${escapeHtml(item.status || "")}</td>
-            <td>${formatConfidence(c.semantic)}</td>
-            <td>${formatConfidence(c.ocr)}</td>
-            <td>${formatConfidence(c.clip)}</td>
-            <td>${formatConfidence(c.audio)}</td>
+            ${scannerValueCells(item)}
             <td>${formatConfidence(item.risk_score)}</td>
             <td>${escapeHtml(item.category || "-")}</td>
             <td>${escapeHtml(item.job_id || "")}</td>
@@ -830,8 +942,8 @@ PAGE = """
         `;
       });
       $("recentJobs").innerHTML = items.length
-        ? rows.join("") + moreRow(items.length, recentShown, "recent", 11)
-        : "<tr><td colspan='11'>No jobs yet.</td></tr>";
+        ? rows.join("") + moreRow(items.length, recentShown, "recent", tableCols())
+        : `<tr><td colspan='${tableCols()}'>No jobs yet.</td></tr>`;
     }
 
     async function loadRecentJobs() {
@@ -885,8 +997,6 @@ PAGE = """
       renderFlow();
     }
 
-    function fmtW(v) { return typeof v === "number" ? v.toFixed(2) : "—"; }
-
     function pipelineNodeHtml(n) {
       if (n.error) {
         return `<div class="node err">
@@ -895,9 +1005,9 @@ PAGE = """
           <div class="err-msg">${escapeHtml(n.error)}</div>
         </div>`;
       }
-      const weightCtl = (typeof n.weight === "number")
-        ? `<div class="node-ctl"><label>weight
-             <input type="number" min="0" max="1" step="0.05" value="${n.weight.toFixed(2)}" data-node-weight="${escapeHtml(n.id)}"></label></div>`
+      const thCtl = (typeof n.threshold === "number")
+        ? `<div class="node-ctl"><label>scam ≥ %
+             <input type="number" min="0" max="100" step="1" value="${Math.round(n.threshold * 100)}" data-node-threshold="${escapeHtml(n.id)}"></label></div>`
         : "";
       const del = n.removable
         ? `<div class="node-ctl"><button type="button" class="linkbtn" data-node-del="${escapeHtml(n.id)}">remove</button></div>`
@@ -909,18 +1019,17 @@ PAGE = """
           ${n.checker ? `<span class="badge">${escapeHtml(n.checker)}</span>` : ""}
         </div>
         <label class="switch"><input type="checkbox" data-node-toggle="${escapeHtml(n.id)}" ${n.enabled ? "checked" : ""}> ${n.enabled ? "enabled" : "disabled"}</label>
-        ${weightCtl}${del}
+        ${thCtl}${del}
       </div>`;
     }
 
     function aggregateNodeHtml(n) {
-      const rows = Object.entries(n.weights || {}).map(([k, v]) => `${escapeHtml(k)}: ${fmtW(v)}`).join("<br>");
       return `<div class="node">
         <div class="node-title">Aggregator</div>
-        <div class="node-badges"><span class="badge">weighted sum</span></div>
-        <div class="node-ctl"><label>fraud ≥
-          <input type="number" min="0" max="1" step="0.05" value="${(n.category_threshold ?? 0).toFixed(2)}" data-agg-threshold></label></div>
-        <div class="weights-mini">${rows}</div>
+        <div class="node-badges"><span class="badge">threshold rule</span></div>
+        <div class="weights-mini">Scam if any checker's confidence reaches its threshold.</div>
+        <div class="node-ctl"><label>default ≥ %
+          <input type="number" min="0" max="100" step="1" value="${Math.round((n.default_threshold ?? 0) * 100)}" data-default-threshold></label></div>
       </div>`;
     }
 
@@ -986,9 +1095,13 @@ PAGE = """
       if (!d) return;
       try {
         if (d.nodeToggle !== undefined) { await postNode(d.nodeToggle, { enabled: e.target.checked }); await loadArchitecture(); archMsg("Saved."); }
-        else if (d.nodeWeight !== undefined) { await postNode(d.nodeWeight, { weight: parseFloat(e.target.value) || 0 }); await loadArchitecture(); archMsg("Saved."); }
-        else if (d.aggThreshold !== undefined) {
-          const r = await fetch("/architecture/aggregate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ category_threshold: parseFloat(e.target.value) || 0 }) });
+        else if (d.nodeThreshold !== undefined) {
+          const pct = Math.max(0, Math.min(100, parseFloat(e.target.value) || 0));
+          await postNode(d.nodeThreshold, { threshold: pct / 100 }); await loadArchitecture(); archMsg("Saved.");
+        }
+        else if (d.defaultThreshold !== undefined) {
+          const pct = Math.max(0, Math.min(100, parseFloat(e.target.value) || 0));
+          const r = await fetch("/architecture/aggregate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ default_threshold: pct / 100 }) });
           if (!r.ok) throw new Error(await r.text());
           await loadArchitecture(); archMsg("Saved.");
         }
@@ -1008,6 +1121,9 @@ PAGE = """
     });
 
     switchTab("dashboard");
+    renderTableHeads();
+    setConfidenceMetrics({});
+    loadScannerColumns().catch(() => {});
     loadModels().catch(() => {});
     loadPriorityList().catch(() => {});
     loadRecentJobs().catch(() => {});
@@ -1017,6 +1133,7 @@ PAGE = """
       if (activeTab !== "dashboard") return;  // don't clobber pipeline edits
       loadPriorityList().catch(() => {});
       loadRecentJobs().catch(() => {});
+      loadScannerColumns().catch(() => {});
       loadModels().catch(() => {});
       loadParserStatus().catch(() => {});
       loadAutoScan().catch(() => {});
@@ -1027,9 +1144,476 @@ PAGE = """
 """
 
 
+ARCHITECTURE_PAGE = """
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Media Watch Architecture</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #121416;
+      --panel: #25272a;
+      --panel-2: #2d3033;
+      --text: #f4f5f6;
+      --muted: #a3a8ad;
+      --line: #54585d;
+      --edge: #6b7076;
+      --accent: #ff6b3a;
+      --accent-2: #26c485;
+      --bad: #ff6b6b;
+      --warn: #ffd166;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 1px 1px, rgba(255,255,255,.10) 1px, transparent 0) 0 0 / 24px 24px,
+        var(--bg);
+      color: var(--text);
+      overflow-x: auto;
+    }
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-width: 1180px;
+      padding: 14px 22px;
+      background: rgba(18,20,22,.88);
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      backdrop-filter: blur(10px);
+    }
+    .brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
+    h1 { margin: 0; font-size: 18px; line-height: 1.2; }
+    .sub { color: var(--muted); font-size: 13px; margin-top: 3px; }
+    .nav { display: flex; align-items: center; gap: 10px; }
+    a, button {
+      font: inherit;
+      border-radius: 6px;
+    }
+    a {
+      color: var(--text);
+      text-decoration: none;
+      border: 1px solid rgba(255,255,255,.12);
+      padding: 9px 12px;
+      background: rgba(255,255,255,.04);
+      font-weight: 700;
+      font-size: 13px;
+    }
+    button {
+      border: 1px solid rgba(255,255,255,.14);
+      background: var(--panel-2);
+      color: var(--text);
+      min-height: 38px;
+      padding: 8px 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button:hover, a:hover { border-color: rgba(255,255,255,.32); background: #34373b; }
+    button:disabled { opacity: .55; cursor: wait; }
+    button.linkbtn {
+      min-height: 0;
+      border: 0;
+      padding: 0;
+      background: none;
+      color: var(--accent);
+      font-size: 12px;
+    }
+    .status { color: var(--muted); font-size: 13px; min-height: 18px; }
+    .status.clean { color: var(--accent-2); }
+    .status.risk { color: var(--bad); }
+    .canvas {
+      position: relative;
+      min-width: 1180px;
+      min-height: calc(100vh - 67px);
+      padding: 90px 44px 72px;
+    }
+    .edges {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .flow {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(180px, 260px);
+      align-items: start;
+      gap: 72px;
+    }
+    .stage {
+      display: grid;
+      gap: 14px;
+      align-content: start;
+      min-height: 360px;
+    }
+    .stage-head {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      padding-left: 10px;
+    }
+    .node-card {
+      position: relative;
+      display: grid;
+      gap: 10px;
+      min-height: 116px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: 0 16px 36px rgba(0,0,0,.28);
+    }
+    .node-card.info { border-style: dashed; color: var(--muted); }
+    .node-card.off { opacity: .55; }
+    .node-card.err { border-color: var(--bad); }
+    .node-top { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .node-icon {
+      display: grid;
+      place-items: center;
+      flex: 0 0 42px;
+      width: 42px;
+      height: 42px;
+      border-radius: 8px;
+      background: rgba(255,255,255,.06);
+      color: var(--accent);
+      font-weight: 900;
+      font-size: 18px;
+    }
+    .node-title { font-size: 15px; font-weight: 800; overflow-wrap: anywhere; }
+    .node-note { color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .badges { display: flex; flex-wrap: wrap; gap: 6px; }
+    .badge {
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 999px;
+      color: var(--muted);
+      padding: 2px 7px;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .badge.plugin { color: #58d0ff; border-color: rgba(88,208,255,.45); }
+    .ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+    label.ctl { cursor: pointer; font-weight: 700; }
+    input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--accent-2); }
+    input[type=number] {
+      width: 72px;
+      border: 1px solid rgba(255,255,255,.16);
+      border-radius: 6px;
+      background: #17191b;
+      color: var(--text);
+      padding: 7px 8px;
+      font: inherit;
+    }
+    .port {
+      position: absolute;
+      top: 50%;
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--line);
+      border-radius: 999px;
+      background: var(--bg);
+      transform: translateY(-50%);
+    }
+    .port.in { left: -9px; }
+    .port.out { right: -9px; }
+    .err-msg { color: var(--bad); font-size: 12px; overflow-wrap: anywhere; }
+    .footer-status {
+      position: fixed;
+      left: 22px;
+      bottom: 18px;
+      z-index: 30;
+      max-width: 720px;
+      padding: 10px 12px;
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 8px;
+      background: rgba(18,20,22,.86);
+      backdrop-filter: blur(10px);
+    }
+    @media (max-width: 760px) {
+      .topbar { min-width: 960px; }
+      .canvas { min-width: 960px; padding-left: 28px; padding-right: 28px; }
+      .flow { gap: 48px; grid-auto-columns: minmax(170px, 220px); }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="node-icon">AI</div>
+      <div>
+        <h1>Pipeline Architecture</h1>
+        <div id="pluginsDir" class="sub">Loading plugins folder...</div>
+      </div>
+    </div>
+    <nav class="nav">
+      <a href="/">Dashboard</a>
+      <button id="reloadPluginsBtn" type="button">Reload plugins</button>
+    </nav>
+  </header>
+  <main id="canvas" class="canvas">
+    <svg id="edges" class="edges"></svg>
+    <div id="flow" class="flow"><div class="status">Loading pipeline...</div></div>
+  </main>
+  <div id="archStatus" class="footer-status status"></div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let archData = null;
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function archMsg(text, isError = false) {
+      $("archStatus").textContent = text;
+      $("archStatus").className = isError ? "footer-status status risk" : "footer-status status clean";
+    }
+
+    async function postNode(id, body) {
+      const res = await fetch(`/architecture/node/${encodeURIComponent(id)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(await res.text());
+    }
+
+    async function postAutoScan(body) {
+      const res = await fetch("/parser/auto-scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(await res.text());
+    }
+
+    async function loadArchitecture() {
+      const res = await fetch("/architecture");
+      if (!res.ok) throw new Error(await res.text());
+      archData = await res.json();
+      renderFlow();
+      requestAnimationFrame(drawEdges);
+    }
+
+    function nodeShell(node, inner, extra = "") {
+      return `<div class="node-card ${extra}" data-flow-node data-stage-id="${escapeHtml(node.stage_id || "")}">
+        <span class="port in"></span>
+        <span class="port out"></span>
+        ${inner}
+      </div>`;
+    }
+
+    function infoNode(stage) {
+      return nodeShell(
+        { stage_id: stage.id },
+        `<div class="node-top"><div class="node-icon">${stage.id === "parse" ? "IN" : "Q"}</div><div><div class="node-title">${escapeHtml(stage.label)}</div><div class="node-note">${escapeHtml(stage.note || "")}</div></div></div>`,
+        "info"
+      );
+    }
+
+    function pipelineNodeHtml(n, stageId) {
+      if (n.error) {
+        return nodeShell(
+          { stage_id: stageId },
+          `<div class="node-top"><div class="node-icon">!</div><div><div class="node-title">${escapeHtml(n.label)}</div><div class="badges"><span class="badge plugin">plugin</span><span class="badge">load error</span></div></div></div><div class="err-msg">${escapeHtml(n.error)}</div>`,
+          "err"
+        );
+      }
+      const threshold = typeof n.threshold === "number"
+        ? `<label class="ctl">scam &gt;= % <input type="number" min="0" max="100" step="1" value="${Math.round(n.threshold * 100)}" data-node-threshold="${escapeHtml(n.id)}"></label>`
+        : "";
+      const remove = n.removable
+        ? `<button type="button" class="linkbtn" data-node-del="${escapeHtml(n.id)}">remove plugin node</button>`
+        : "";
+      const inner = `
+        <div class="node-top">
+          <div class="node-icon">${escapeHtml((n.label || n.id || "?").slice(0, 2).toUpperCase())}</div>
+          <div>
+            <div class="node-title">${escapeHtml(n.label)}</div>
+            <div class="badges">
+              <span class="badge ${n.source === "plugin" ? "plugin" : ""}">${escapeHtml(n.source || "node")}</span>
+              ${n.checker ? `<span class="badge">${escapeHtml(n.checker)}</span>` : ""}
+            </div>
+          </div>
+        </div>
+        <label class="ctl"><input type="checkbox" data-node-toggle="${escapeHtml(n.id)}" ${n.enabled ? "checked" : ""}> ${n.enabled ? "enabled" : "disabled"}</label>
+        <div class="ctl">${threshold}${remove}</div>`;
+      return nodeShell({ stage_id: stageId }, inner, n.enabled ? "" : "off");
+    }
+
+    function aggregateNodeHtml(n, stageId) {
+      const inner = `
+        <div class="node-top">
+          <div class="node-icon">&gt;=</div>
+          <div><div class="node-title">Aggregator</div><div class="node-note">Flags scam when any enabled scanner reaches its threshold.</div></div>
+        </div>
+        <label class="ctl">default &gt;= % <input type="number" min="0" max="100" step="1" value="${Math.round((n.default_threshold ?? 0) * 100)}" data-default-threshold></label>`;
+      return nodeShell({ stage_id: stageId }, inner);
+    }
+
+    function investigateNodeHtml(n, stageId) {
+      const th = n.thresholds || {};
+      const row = (label, key) => `<label class="ctl">${label} % <input type="number" min="0" max="100" step="1" value="${Math.round((th[key] ?? 0) * 100)}" data-inv-th="${key}"></label>`;
+      const inner = `
+        <div class="node-top">
+          <div class="node-icon">GO</div>
+          <div><div class="node-title">Investigator</div><div class="node-note">Auto-scans a channel after a risky reel.</div></div>
+        </div>
+        <label class="ctl"><input type="checkbox" data-inv-toggle ${n.enabled ? "checked" : ""}> ${n.enabled ? "auto-scan on" : "auto-scan off"}</label>
+        <label class="ctl">max reels <input type="number" min="1" step="1" value="${n.max_reels || ""}" data-inv-max></label>
+        <div class="ctl">${row("Semantic", "semantic")}${row("OCR", "ocr")}${row("CLIP", "clip")}${row("Audio", "audio")}</div>`;
+      return nodeShell({ stage_id: stageId }, inner, n.enabled ? "" : "off");
+    }
+
+    function stageHtml(stage) {
+      let body = "";
+      if (stage.kind === "info") body = infoNode(stage);
+      else if (stage.kind === "pipelines") body = (stage.nodes || []).map((n) => pipelineNodeHtml(n, stage.id)).join("") || infoNode({ ...stage, note: "No nodes registered." });
+      else if (stage.kind === "aggregate") body = aggregateNodeHtml((stage.nodes || [])[0] || {}, stage.id);
+      else if (stage.kind === "investigate") body = investigateNodeHtml((stage.nodes || [])[0] || {}, stage.id);
+      return `<section class="stage" data-stage="${escapeHtml(stage.id)}"><div class="stage-head">${escapeHtml(stage.label)}</div>${body}</section>`;
+    }
+
+    function renderFlow() {
+      if (!archData) return;
+      $("flow").innerHTML = (archData.stages || []).map(stageHtml).join("");
+      $("pluginsDir").textContent = archData.plugins_dir ? `plugins folder: ${archData.plugins_dir}` : "No plugins folder configured";
+    }
+
+    function drawEdges() {
+      const svg = $("edges");
+      const canvas = $("canvas").getBoundingClientRect();
+      svg.innerHTML = "";
+      const stages = [...document.querySelectorAll("[data-stage]")];
+      svg.setAttribute("viewBox", `0 0 ${canvas.width} ${canvas.height}`);
+      for (let i = 0; i < stages.length - 1; i += 1) {
+        const fromNodes = [...stages[i].querySelectorAll("[data-flow-node]")];
+        const toNodes = [...stages[i + 1].querySelectorAll("[data-flow-node]")];
+        for (const from of fromNodes) {
+          const a = from.getBoundingClientRect();
+          for (const to of toNodes) {
+            const b = to.getBoundingClientRect();
+            const x1 = a.right - canvas.left;
+            const y1 = a.top + a.height / 2 - canvas.top;
+            const x2 = b.left - canvas.left;
+            const y2 = b.top + b.height / 2 - canvas.top;
+            const dx = Math.max(44, (x2 - x1) / 2);
+            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            path.setAttribute("d", `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`);
+            path.setAttribute("fill", "none");
+            path.setAttribute("stroke", "var(--edge)");
+            path.setAttribute("stroke-width", "2");
+            path.setAttribute("opacity", ".7");
+            svg.appendChild(path);
+          }
+        }
+      }
+    }
+
+    async function deleteNode(id) {
+      if (!confirm(`Remove checker "${id}" from the running pipeline? The plugin file stays on disk.`)) return;
+      const res = await fetch(`/architecture/node/${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(await res.text());
+    }
+
+    $("reloadPluginsBtn").addEventListener("click", async () => {
+      $("reloadPluginsBtn").disabled = true;
+      try {
+        const res = await fetch("/architecture/reload", { method: "POST" });
+        if (!res.ok) throw new Error(await res.text());
+        archData = await res.json();
+        renderFlow();
+        requestAnimationFrame(drawEdges);
+        archMsg("Plugins reloaded.");
+      } catch (err) {
+        archMsg(err.message || String(err), true);
+      } finally {
+        $("reloadPluginsBtn").disabled = false;
+      }
+    });
+
+    document.addEventListener("change", async (e) => {
+      const d = e.target && e.target.dataset;
+      if (!d) return;
+      try {
+        if (d.nodeToggle !== undefined) await postNode(d.nodeToggle, { enabled: e.target.checked });
+        else if (d.nodeThreshold !== undefined) {
+          const pct = Math.max(0, Math.min(100, parseFloat(e.target.value) || 0));
+          await postNode(d.nodeThreshold, { threshold: pct / 100 });
+        } else if (d.defaultThreshold !== undefined) {
+          const pct = Math.max(0, Math.min(100, parseFloat(e.target.value) || 0));
+          const r = await fetch("/architecture/aggregate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ default_threshold: pct / 100 }),
+          });
+          if (!r.ok) throw new Error(await r.text());
+        } else if (d.invToggle !== undefined) await postAutoScan({ enabled: e.target.checked });
+        else if (d.invMax !== undefined) {
+          const n = parseInt(e.target.value, 10);
+          await postAutoScan({ max_reels: n > 0 ? n : 1 });
+        } else if (d.invTh !== undefined) {
+          const pct = Math.max(0, Math.min(100, parseFloat(e.target.value) || 0));
+          await postAutoScan({ thresholds: { [d.invTh]: pct / 100 } });
+        } else {
+          return;
+        }
+        await loadArchitecture();
+        archMsg("Saved.");
+      } catch (err) {
+        archMsg(err.message || String(err), true);
+      }
+    });
+
+    document.addEventListener("click", async (e) => {
+      const d = e.target && e.target.dataset;
+      if (!d || d.nodeDel === undefined) return;
+      try {
+        await deleteNode(d.nodeDel);
+        await loadArchitecture();
+        archMsg(`Removed ${d.nodeDel}.`);
+      } catch (err) {
+        archMsg(err.message || String(err), true);
+      }
+    });
+
+    window.addEventListener("resize", () => requestAnimationFrame(drawEdges));
+    loadArchitecture().catch((err) => archMsg(err.message || String(err), true));
+  </script>
+</body>
+</html>
+"""
+
+
 @router.get("/", response_class=HTMLResponse)
 async def index() -> str:
     return PAGE
+
+
+@router.get("/architecture-ui", response_class=HTMLResponse)
+async def architecture_ui() -> str:
+    return ARCHITECTURE_PAGE
 
 
 @router.get("/models")

@@ -4,8 +4,8 @@ The orchestrator runs whatever pipelines are in the shared
 :class:`PipelineRegistry`, and the aggregator scores findings using the module
 globals in :mod:`app.pipelines.aggregator`. This class is the single editing
 surface over both: it can enable/disable nodes (register/remove on the live
-registry), retune per-modality weights and the category threshold (mutate the
-aggregator globals in place), and hot-load checker plugins from a folder.
+registry), retune per-checker scam thresholds and the default threshold (mutate
+the aggregator globals in place), and hot-load checker plugins from a folder.
 
 Everything here mutates process-wide state that the inline workers already read
 on every job, so edits take effect on the next analyzed reel — no restart.
@@ -79,7 +79,7 @@ class PipelineArchitecture:
             "checker": MODALITY_CHECKER.get(modality, modality or "?"),
             "source": "plugin" if name in self._plugin_names() else "builtin",
             "enabled": name in self.registry,
-            "weight": aggregator.MODALITY_WEIGHT.get(modality),
+            "threshold": aggregator.threshold_for(name),
             "removable": name in self._plugin_names(),
             "error": "",
         }
@@ -103,7 +103,7 @@ class PipelineArchitecture:
                     "checker": "",
                     "source": "plugin",
                     "enabled": False,
-                    "weight": None,
+                    "threshold": None,
                     "removable": False,
                     "error": load.error,
                 })
@@ -111,8 +111,7 @@ class PipelineArchitecture:
         aggregate_node = {
             "id": "aggregate",
             "label": "Aggregator",
-            "weights": dict(aggregator.MODALITY_WEIGHT),
-            "category_threshold": aggregator.CATEGORY_THRESHOLD,
+            "default_threshold": aggregator.DEFAULT_THRESHOLD,
         }
         investigate_node = {"id": "investigate", "label": "Investigator"}
         if auto_scan is not None:
@@ -130,13 +129,12 @@ class PipelineArchitecture:
         ]
         return {
             "stages": stages,
-            "weights": dict(aggregator.MODALITY_WEIGHT),
-            "category_threshold": aggregator.CATEGORY_THRESHOLD,
+            "default_threshold": aggregator.DEFAULT_THRESHOLD,
             "plugins_dir": str(self.plugins_dir),
         }
 
     # ---- edits ---------------------------------------------------------
-    def set_node(self, node_id: str, enabled: bool | None = None, weight: float | None = None) -> dict:
+    def set_node(self, node_id: str, enabled: bool | None = None, threshold: float | None = None) -> dict:
         pipeline = self._known.get(node_id)
         if pipeline is None:
             raise KeyError(node_id)
@@ -145,10 +143,8 @@ class PipelineArchitecture:
                 self.registry.register(pipeline)
             elif not enabled and node_id in self.registry:
                 self.registry.remove(node_id)
-        if weight is not None:
-            modality = getattr(pipeline, "modality", "")
-            if modality:
-                aggregator.MODALITY_WEIGHT[modality] = max(0.0, min(1.0, float(weight)))
+        if threshold is not None:
+            aggregator.SCANNER_THRESHOLDS[node_id] = max(0.0, min(1.0, float(threshold)))
         return self._node(pipeline)
 
     def remove_node(self, node_id: str) -> None:
@@ -156,11 +152,12 @@ class PipelineArchitecture:
             raise ValueError("only plugin checkers can be removed; disable built-ins instead")
         self.registry.remove(node_id)
         self._known.pop(node_id, None)
+        aggregator.SCANNER_THRESHOLDS.pop(node_id, None)
         self._plugin_loads = [
             load for load in self._plugin_loads
             if not (load.pipeline is not None and load.pipeline.name == node_id)
         ]
 
-    def set_category_threshold(self, value: float) -> float:
-        aggregator.CATEGORY_THRESHOLD = max(0.0, min(1.0, float(value)))
-        return aggregator.CATEGORY_THRESHOLD
+    def set_default_threshold(self, value: float) -> float:
+        aggregator.DEFAULT_THRESHOLD = max(0.0, min(1.0, float(value)))
+        return aggregator.DEFAULT_THRESHOLD

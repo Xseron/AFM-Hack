@@ -21,6 +21,23 @@ def method_confidences(findings) -> dict[str, float]:
     return values
 
 
+def scanner_confidences(findings) -> dict[str, float]:
+    """Max confidence per concrete pipeline id.
+
+    ``method_confidences`` keeps the old dashboard buckets. This exposes the
+    actual live scanner nodes, including plugins, so the UI can render the same
+    scanners the architecture page has enabled.
+    """
+    values: dict[str, float] = {}
+    for finding in findings:
+        pipeline = (finding.evidence or {}).get("_pipeline")
+        if not pipeline:
+            continue
+        confidence = float(finding.confidence or 0.0)
+        values[pipeline] = max(values.get(pipeline, 0.0), confidence)
+    return values
+
+
 def source_info(job) -> dict:
     meta = job.source_meta or {}
     top_bar_url = meta.get("top_bar_url") or meta.get("page_url") or job.source_url
@@ -46,4 +63,5 @@ def job_list_item(job) -> dict:
         "created_at": job.created_at.isoformat() if job.created_at else None,
         "updated_at": job.updated_at.isoformat() if job.updated_at else None,
         "method_confidences": method_confidences(job.findings),
+        "scanner_confidences": scanner_confidences(job.findings),
     }

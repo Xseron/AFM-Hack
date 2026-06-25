@@ -1,0 +1,8 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\2f045184f4a54f59af318f3bd5d47ef3\DWlZKgbjHWO.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Ты зашёл, а я не волнуй, а ты не подошёл, ты determination.
+В��ieurs, ты не волнуй, ты что жиле на User Platz.
+Ты не тихо, а ты не сошёл.

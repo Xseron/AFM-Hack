@@ -1,0 +1,6 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\f1f1f67c2f8b464eb5fe256829548756\DZt26WcNKBS.webm
+# whisper_model: base
+# language: ru
+# language_probability: 1.000000
+
+Даже, даже, даже на моих утро

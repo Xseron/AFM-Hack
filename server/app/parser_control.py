@@ -14,12 +14,17 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 
 
 # The video checkers a reel is scored on; each gets its own scam threshold.
 CHECKERS = ("semantic", "ocr", "clip", "audio")
+
+# Where the bot looks for reels and which browser it attaches to over CDP.
+REELS_FEED_URL = "https://www.instagram.com/reels/"
+DEFAULT_CHROME_PATH = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
 
 
 @dataclass
@@ -49,11 +54,24 @@ def _default_parser_dir() -> str:
 
 
 class ParserController:
-    def __init__(self, parser_dir: str = "", server_url: str = "http://localhost:8000"):
+    def __init__(
+        self,
+        parser_dir: str = "",
+        server_url: str = "http://localhost:8000",
+        chrome_path: str = "",
+        cdp_port: int = 9222,
+        chrome_profile_dir: str = "",
+    ):
         self._parser_dir = parser_dir or _default_parser_dir()
         self._server_url = server_url
+        self._chrome_path = chrome_path or DEFAULT_CHROME_PATH
+        self._cdp_port = cdp_port
+        self._chrome_profile_dir = chrome_profile_dir or str(
+            Path(self._parser_dir) / "state" / "chrome-profile"
+        )
         self._lock = threading.Lock()
         self._proc: subprocess.Popen | None = None
+        self._browser_proc: subprocess.Popen | None = None
         self._channel: str = ""
         self._started_at: float | None = None
         self._log_path = str(Path(self._parser_dir) / "parser_run.log")
@@ -69,6 +87,47 @@ class ParserController:
         if not reel_url:
             raise ValueError("reel_url must not be empty")
         return self._spawn(["--reel", reel_url], reel_url)
+
+    def start_feed(self, max_reels: int | None = None) -> dict:
+        """Ensure the CDP browser is up, then record from the global reels feed."""
+        browser = self.ensure_browser()
+        status = self._spawn([], "feed", max_reels=max_reels)
+        status["browser_launched"] = browser.get("launched", False)
+        return status
+
+    # --- browser (CDP) ---
+    def cdp_reachable(self) -> bool:
+        url = f"http://127.0.0.1:{self._cdp_port}/json/version"
+        try:
+            with urllib.request.urlopen(url, timeout=0.5) as resp:  # noqa: S310 (localhost only)
+                return resp.status == 200
+        except Exception:  # noqa: BLE001
+            return False
+
+    def ensure_browser(self) -> dict:
+        """Launch Chrome with remote debugging if it isn't already reachable."""
+        if self.cdp_reachable():
+            return {"launched": False, "running": True}
+        if not Path(self._chrome_path).exists():
+            raise RuntimeError(
+                f"Chrome not found at {self._chrome_path}; set MW_PARSER_CHROME_PATH"
+            )
+        Path(self._chrome_profile_dir).mkdir(parents=True, exist_ok=True)
+        cmd = [
+            self._chrome_path,
+            f"--remote-debugging-port={self._cdp_port}",
+            f"--user-data-dir={self._chrome_profile_dir}",
+            REELS_FEED_URL,
+        ]
+        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+        self._browser_proc = subprocess.Popen(cmd, creationflags=creationflags)
+        for _ in range(40):  # wait up to ~20s for CDP to come online
+            if self.cdp_reachable():
+                return {"launched": True, "running": True}
+            time.sleep(0.5)
+        raise RuntimeError(
+            f"launched Chrome but its CDP endpoint never came up on port {self._cdp_port}"
+        )
 
     def _spawn(self, mode_args: list[str], label: str, max_reels: int | None = None) -> dict:
         with self._lock:
@@ -112,13 +171,14 @@ class ParserController:
             self._proc = None
             return {"stopped": True, **self.status()}
 
-    def status(self) -> dict:
+    def status(self, check_browser: bool = True) -> dict:
         running = self._is_running()
         return {
             "running": running,
             "channel": self._channel if running else "",
             "pid": self._proc.pid if (running and self._proc) else None,
             "started_at": self._started_at if running else None,
+            "browser_running": self.cdp_reachable() if check_browser else None,
             "log_path": self._log_path,
         }
 

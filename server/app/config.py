@@ -35,9 +35,17 @@ class Settings(BaseSettings):
     parser_dir: str = ""
     parser_server_url: str = "http://localhost:8000"
     parser_max_reels: int = 30
+    # Browser the bot attaches to over CDP. The "Start Feed Parsing" button
+    # launches Chrome with remote debugging if it isn't already reachable.
+    parser_chrome_path: str = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+    parser_cdp_port: int = 9222
+    parser_chrome_profile_dir: str = ""  # empty = <parser_dir>/state/chrome-profile
     # Folder scanned for code-backed checker plugins (see app.pipelines.plugins).
     # Empty = auto-detect (<server>/plugins).
     pipeline_plugins_dir: str = ""
+    # Default per-scanner scam threshold: a reel is scam when any checker's
+    # confidence reaches its threshold. Editable live on the Pipeline tab.
+    scam_threshold: float = 0.5
     # Auto-investigate: when a reel is flagged scam (any checker >= threshold),
     # automatically scan its whole channel (up to max). Toggled live from the UI.
     auto_scan_enabled: bool = False

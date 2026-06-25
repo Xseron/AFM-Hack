@@ -18,6 +18,10 @@ class ReelRequest(BaseModel):
     reel_url: str
 
 
+class FeedRequest(BaseModel):
+    max_reels: int | None = None
+
+
 class AutoScanRequest(BaseModel):
     enabled: bool | None = None
     thresholds: dict[str, float] | None = None
@@ -40,6 +44,16 @@ async def start_parser(body: StartRequest, components=Depends(get_components)) -
         raise HTTPException(status_code=422, detail=str(e)) from e
 
 
+@router.post("/feed")
+def start_feed(body: FeedRequest, components=Depends(get_components)) -> dict:
+    # sync def: launching Chrome can block ~20s, so run it off the event loop.
+    max_reels = body.max_reels if (body.max_reels and body.max_reels > 0) else None
+    try:
+        return components.parser.start_feed(max_reels=max_reels)
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+
 @router.post("/reel")
 async def check_reel(body: ReelRequest, components=Depends(get_components)) -> dict:
     url = (body.reel_url or "").strip()
@@ -59,7 +73,8 @@ async def stop_parser(components=Depends(get_components)) -> dict:
 
 
 @router.get("/status")
-async def parser_status(components=Depends(get_components)) -> dict:
+def parser_status(components=Depends(get_components)) -> dict:
+    # sync def: status() probes the CDP port, so keep it off the event loop.
     return components.parser.status()
 
 
