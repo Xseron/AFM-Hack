@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import os
+
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 
 from app.api.deps import get_components
 from app.api.serializers import method_confidences, scanner_confidences, source_info
@@ -49,3 +52,11 @@ async def get_explanations(job_id: str, components=Depends(get_components)) -> d
             for e in job.explanations
         ],
     }
+
+
+@router.get("/jobs/{job_id}/video")
+async def get_job_video(job_id: str, components=Depends(get_components)):
+    job = await components.repo.get_job(job_id)
+    if job is None or not job.buffer_path or not os.path.isfile(job.buffer_path):
+        raise HTTPException(status_code=404, detail="video not available")
+    return FileResponse(job.buffer_path)

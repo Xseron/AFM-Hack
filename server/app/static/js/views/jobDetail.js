@@ -1,0 +1,89 @@
+import { api, fmt } from "../api.js";
+import { escapeHtml } from "../util.js";
+import { findingsHtml } from "../components/findings.js";
+import { categoryBadge, riskClass, confidenceBar } from "../components/riskBadge.js";
+
+let timer = null;
+
+export function render(mount, params) {
+  const jobId = decodeURIComponent(params[0]);
+  mount.innerHTML = `<div id="jobRoot"><section class="card"><a href="#/jobs">&larr; Jobs</a>
+    <h2 style="margin-top:10px">Job ${escapeHtml(jobId)}</h2>
+    <p class="muted">Loading…</p></section></div>`;
+  poll(mount, jobId);
+  timer = setInterval(() => poll(mount, jobId), 1500);
+}
+
+export function stop() { if (timer) clearInterval(timer); timer = null; }
+
+async function poll(mount, jobId) {
+  let job;
+  try { job = await api(`/jobs/${encodeURIComponent(jobId)}`); }
+  catch (err) { mount.querySelector("#jobRoot").innerHTML = `<section class="card"><a href="#/jobs">&larr; Jobs</a><p class="banner">${escapeHtml(err.message)}</p></section>`; stop(); return; }
+
+  let explanations = [];
+  if (job.status === "done" || job.status === "failed") {
+    stop();
+    try { explanations = (await api(`/jobs/${encodeURIComponent(jobId)}/explanations`)).explanations || []; } catch (_) {}
+  }
+  draw(mount, job, explanations);
+}
+
+function scannerBars(job) {
+  const sc = job.scanner_confidences || job.method_confidences || {};
+  const entries = Object.entries(sc);
+  if (!entries.length) return '<p class="muted">No scanner scores.</p>';
+  return entries.map(([k, v]) => `
+    <div style="display:grid;gap:4px">
+      <div class="row" style="justify-content:space-between"><span>${escapeHtml(k)}</span><span class="muted">${fmt(v)}</span></div>
+      ${confidenceBar(v)}</div>`).join("");
+}
+
+function sourceHtml(job) {
+  const s = job.source || {};
+  const link = s.url || s.permalink || s.top_bar_url;
+  const rows = [
+    ["Platform", s.platform], ["Shortcode", s.shortcode],
+    ["URL", link ? `<a href="${escapeHtml(link)}" target="_blank" rel="noreferrer">open</a>` : null],
+  ].filter(([, v]) => v);
+  return rows.map(([k, v]) => `<div class="kpi"><span>${k}</span><strong>${k === "URL" ? v : escapeHtml(v)}</strong></div>`).join("");
+}
+
+function explanationsHtml(list) {
+  if (!list.length) return '<p class="muted">No explanations.</p>';
+  return list.map((e) => `
+    <div class="finding">
+      <strong>${escapeHtml(e.method || "")} <span class="muted">(${escapeHtml(e.scope || "")})</span></strong>
+      <p>${escapeHtml(e.summary || "")}</p>
+      <details><summary>payload</summary><pre>${escapeHtml(JSON.stringify(e.payload || {}, null, 2))}</pre></details>
+    </div>`).join("");
+}
+
+function draw(mount, job, explanations) {
+  const risk = job.risk_score;
+  mount.querySelector("#jobRoot").innerHTML = `
+    <section class="card">
+      <a href="#/jobs">&larr; Jobs</a>
+      <div class="row" style="justify-content:space-between;margin-top:8px">
+        <h2>Job ${escapeHtml(job.job_id)}</h2>
+        <div class="row">
+          <span class="badge ${riskClass(risk)}">risk ${fmt(risk)}</span>
+          ${categoryBadge(job.category)}
+          <span class="badge">${escapeHtml(job.status || "")}</span>
+        </div>
+      </div>
+      <p class="muted">${escapeHtml(job.description || "")}</p>
+    </section>
+
+    <section class="card">
+      <h2>Video</h2>
+      <video controls style="width:100%;max-height:420px;border-radius:8px;background:#000"
+        src="/jobs/${encodeURIComponent(job.job_id)}/video"
+        onerror="this.replaceWith(Object.assign(document.createElement('p'),{className:'muted',textContent:'Video not stored; use the source link.'}))"></video>
+    </section>
+
+    <section class="card"><h2>Source</h2><div class="kpis">${sourceHtml(job)}</div></section>
+    <section class="card"><h2>Scanner confidence</h2><div style="display:grid;gap:10px">${scannerBars(job)}</div></section>
+    ${findingsHtml(job.findings)}
+    <section class="card"><h2>Explanations</h2>${explanationsHtml(explanations)}</section>`;
+}

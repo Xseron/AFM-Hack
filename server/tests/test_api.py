@@ -60,20 +60,17 @@ async def test_ui_served(app_client):
     client, _ = app_client
     resp = await client.get("/")
     assert resp.status_code == 200
-    assert "Upload and Check" in resp.text
-    assert "/architecture-ui" in resp.text
-    assert "Clear Dedup" in resp.text
-    assert "Priority List" in resp.text
-    assert "Recent Reels" in resp.text
-    assert "Description" in resp.text
+    # New static app shell: sidebar nav + module bootstrap.
+    assert "AI Media Watch" in resp.text
+    assert 'data-nav="jobs"' in resp.text
+    assert "/static/js/app.js" in resp.text
 
 
-async def test_architecture_ui_served(app_client):
+async def test_architecture_ui_redirects(app_client):
     client, _ = app_client
     resp = await client.get("/architecture-ui")
-    assert resp.status_code == 200
-    assert "Pipeline Architecture" in resp.text
-    assert "Reload plugins" in resp.text
+    assert resp.status_code == 307
+    assert resp.headers["location"] == "/#/pipeline"
 
 
 async def test_architecture_includes_tiktok_source(app_client):

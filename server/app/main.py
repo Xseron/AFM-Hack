@@ -3,10 +3,12 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
-from app.api import architecture, dedup, health, jobs, parser, pipelines, review, ui, videos
+from app.api import architecture, dedup, health, investigation, jobs, parser, pipelines, review, ui, videos
 from app.config import Settings, get_settings
 from app.db.repository import JobRepository
 from app.db.session import init_db, make_engine, make_sessionmaker
@@ -140,8 +142,11 @@ def create_app(settings: Settings | None = None, components: Components | None =
     app = FastAPI(title="AI Media Watch", lifespan=lifespan)
     app.state.components = components
 
-    for module in (ui, health, videos, jobs, review, pipelines, dedup, parser, architecture):
+    for module in (ui, health, videos, jobs, review, pipelines, dedup, parser, architecture, investigation):
         app.include_router(module.router)
+
+    static_dir = Path(__file__).parent / "static"
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
     return app
 
 

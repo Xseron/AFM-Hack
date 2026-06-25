@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Media Watch</title>
+  <link rel="icon" href="data:,">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="https://unpkg.com/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand"><span class="logo">AI</span>
+      <span class="brand-text">Media Watch<small>scam reels console</small></span>
+    </div>
+    <div class="nav-label">Monitoring</div>
+    <nav>
+      <a data-nav="overview" href="#/overview"><span class="ndot"></span>Overview</a>
+      <a data-nav="jobs" href="#/jobs"><span class="ndot"></span>Jobs</a>
+      <a data-nav="investigation" href="#/investigation"><span class="ndot"></span>Investigation</a>
+      <a data-nav="pipeline" href="#/pipeline"><span class="ndot"></span>Pipeline</a>
+      <a data-nav="controls" href="#/controls"><span class="ndot"></span>Controls</a>
+    </nav>
+    <div class="sidebar-foot"><span class="live"></span> live</div>
+  </aside>
+  <main id="view" class="view"></main>
+  <script type="module" src="/static/js/app.js"></script>
+</body>
+</html>
