@@ -84,6 +84,71 @@ async def test_architecture_includes_tiktok_source(app_client):
     assert {n["id"] for n in source["nodes"]} == {"instagram", "tiktok"}
 
 
+async def test_architecture_edge_remove_disables_scanner(app_client):
+    client, _ = app_client
+    removed = await client.post(
+        "/architecture/edge/remove",
+        json={"from_id": "priority", "to_id": "visual_cv"},
+    )
+    assert removed.status_code == 200
+    graph = removed.json()
+    scanner = next(s for s in graph["stages"] if s["id"] == "scanner")
+    visual = next(n for n in scanner["nodes"] if n["id"] == "visual_cv")
+    assert visual["enabled"] is False
+    assert {"id": "priority->visual_cv", "from": "priority", "to": "visual_cv"} not in graph["edges"]
+
+
+async def test_architecture_edge_connect_enables_scanner(app_client):
+    client, _ = app_client
+    await client.post(
+        "/architecture/edge/remove",
+        json={"from_id": "priority", "to_id": "visual_cv"},
+    )
+    connected = await client.post(
+        "/architecture/edge",
+        json={"from_id": "priority", "to_id": "visual_cv"},
+    )
+    assert connected.status_code == 200
+    graph = connected.json()
+    scanner = next(s for s in graph["stages"] if s["id"] == "scanner")
+    visual = next(n for n in scanner["nodes"] if n["id"] == "visual_cv")
+    assert visual["enabled"] is True
+    assert {"id": "priority->visual_cv", "from": "priority", "to": "visual_cv"} in graph["edges"]
+
+
+async def test_architecture_edge_remove_disables_investigator_path(app_client):
+    client, _ = app_client
+    enabled = await client.post("/parser/auto-scan", json={"enabled": True})
+    assert enabled.status_code == 200
+    removed = await client.post(
+        "/architecture/edge/remove",
+        json={"from_id": "aggregate", "to_id": "investigate"},
+    )
+    assert removed.status_code == 200
+    graph = removed.json()
+    assert {"id": "aggregate->investigate", "from": "aggregate", "to": "investigate"} not in graph["edges"]
+    auto_scan = await client.get("/parser/auto-scan")
+    assert auto_scan.json()["enabled"] is False
+
+
+async def test_architecture_source_edge_can_be_removed_and_restored(app_client):
+    client, _ = app_client
+    edge = {"id": "tiktok->parse", "from": "tiktok", "to": "parse"}
+    removed = await client.post(
+        "/architecture/edge/remove",
+        json={"from_id": "tiktok", "to_id": "parse"},
+    )
+    assert removed.status_code == 200
+    assert edge not in removed.json()["edges"]
+
+    connected = await client.post(
+        "/architecture/edge",
+        json={"from_id": "tiktok", "to_id": "parse"},
+    )
+    assert connected.status_code == 200
+    assert edge in connected.json()["edges"]
+
+
 async def test_parser_feed_routes_tiktok_platform(app_client):
     client, components = app_client
 

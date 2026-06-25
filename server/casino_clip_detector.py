@@ -106,11 +106,42 @@ def sample_video_frames(
 
     total_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     fps = float(capture.get(cv2.CAP_PROP_FPS) or 0.0)
-
-    if total_frames <= 0:
-        raise ValueError(f"Could not read frame count from video: {path}")
-
     rng = random.Random(source_seed(path, seed))
+
+    # Containers produced by the browser's MediaRecorder (the parser's .webm clips)
+    # carry no frame count or duration in their header, so CAP_PROP_FRAME_COUNT is
+    # 0 and frame seeking is unreliable. Fall back to a single sequential pass with
+    # reservoir sampling, which needs neither a known total nor seeking.
+    if total_frames > 0:
+        frames = _sample_by_seeking(capture, total_frames, fps, frame_count, rng)
+    else:
+        frames = _sample_by_streaming(capture, fps, frame_count, rng)
+
+    capture.release()
+
+    if not frames:
+        raise ValueError(f"Could not read sampled frames from video: {path}")
+
+    return frames
+
+
+def _frame_to_image(frame):
+    import cv2
+    from PIL import Image
+
+    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    return Image.fromarray(frame_rgb).convert("RGB")
+
+
+def _sample_by_seeking(
+    capture,
+    total_frames: int,
+    fps: float,
+    frame_count: int,
+    rng: random.Random,
+) -> list[tuple[object, int, float]]:
+    import cv2
+
     sample_count = min(frame_count, total_frames)
     frame_indices = sorted(rng.sample(range(total_frames), sample_count))
     frames: list[tuple[object, int, float]] = []
@@ -120,18 +151,46 @@ def sample_video_frames(
         ok, frame = capture.read()
         if not ok or frame is None:
             continue
-
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        image = Image.fromarray(frame_rgb).convert("RGB")
         timestamp = frame_index / fps if fps > 0 else 0.0
-        frames.append((image, frame_index, timestamp))
-
-    capture.release()
-
-    if not frames:
-        raise ValueError(f"Could not read sampled frames from video: {path}")
+        frames.append((_frame_to_image(frame), frame_index, timestamp))
 
     return frames
+
+
+def _sample_by_streaming(
+    capture,
+    fps: float,
+    frame_count: int,
+    rng: random.Random,
+) -> list[tuple[object, int, float]]:
+    """Reservoir-sample `frame_count` frames in one sequential pass (no seeking).
+
+    Used for streamed containers (MediaRecorder .webm) whose headers lack a frame
+    count. Keeps the raw frames and converts only the survivors, so memory stays at
+    `frame_count` frames regardless of clip length.
+    """
+    import cv2
+
+    reservoir: list[tuple[object, int, float]] = []  # (raw_frame, index, timestamp)
+    index = 0
+
+    while True:
+        ok, frame = capture.read()
+        if not ok or frame is None:
+            break
+        timestamp = (capture.get(cv2.CAP_PROP_POS_MSEC) or 0.0) / 1000.0
+        if timestamp <= 0.0 and fps > 0:
+            timestamp = index / fps
+        if len(reservoir) < frame_count:
+            reservoir.append((frame, index, timestamp))
+        else:
+            j = rng.randint(0, index)
+            if j < frame_count:
+                reservoir[j] = (frame, index, timestamp)
+        index += 1
+
+    reservoir.sort(key=lambda item: item[1])
+    return [(_frame_to_image(frame), idx, ts) for frame, idx, ts in reservoir]
 
 
 class ClipCasinoDetector:

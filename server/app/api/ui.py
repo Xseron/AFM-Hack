@@ -141,6 +141,15 @@ PAGE = """
     .clean { color: var(--good); }
     .risk { color: var(--bad); }
     .warn { color: var(--warn); }
+    /* Per-reel manual-check risk shading (any non-excluded scanner vs threshold). */
+    tr.risk-red td { background: #fdeceb; }
+    tr.risk-yellow td { background: #fff7e6; }
+    tr.risk-green td { background: #ecfdf3; }
+    tr.risk-red:hover td { background: #fbdcd9; }
+    tr.risk-yellow:hover td { background: #fff0cc; }
+    tr.risk-green:hover td { background: #dcfbe7; }
+    .section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 14px; }
+    .section-head h2 { margin: 0; }
     table {
       width: 100%;
       border-collapse: collapse;
@@ -410,7 +419,10 @@ PAGE = """
     </section>
 
     <section>
-      <h2>Recent Reels</h2>
+      <div class="section-head">
+        <h2>Recent Reels</h2>
+        <button id="exportXlsxBtn" type="button" class="secondary">Export to Excel</button>
+      </div>
       <table>
         <thead id="recentHead"></thead>
         <tbody id="recentJobs"><tr><td>No recent jobs loaded.</td></tr></tbody>
@@ -522,6 +534,27 @@ PAGE = """
       return undefined;
     }
 
+    // Scanners that don't drive the manual-check risk shading.
+    const RISK_EXCLUDE = new Set(["contact_spam", "deepfake_gend"]);
+
+    // red: a non-excluded scanner exceeds its threshold; yellow: one reaches
+    // threshold/1.5; green otherwise. Returns "" when no threshold is known yet.
+    function rowRiskClass(item) {
+      let level = 0; // 0 green, 1 yellow, 2 red
+      let known = false;
+      for (const c of scannerColumns) {
+        if (RISK_EXCLUDE.has(c.id)) continue;
+        if (typeof c.threshold !== "number") continue;
+        const v = confidenceFor(item, c);
+        if (typeof v !== "number") continue;
+        known = true;
+        if (v > c.threshold) level = Math.max(level, 2);
+        else if (v >= c.threshold / 1.5) level = Math.max(level, 1);
+      }
+      if (!known) return "";
+      return level === 2 ? "risk-red" : level === 1 ? "risk-yellow" : "risk-green";
+    }
+
     function setConfidenceMetrics(job) {
       const cols = scannerColumns.filter((c) => c.enabled !== false);
       $("confidenceGrid").innerHTML = cols.length
@@ -551,8 +584,16 @@ PAGE = """
         const res = await fetch("/architecture");
         if (!res.ok) return;
         const data = await res.json();
-        const scannerStage = (data.stages || []).find((s) => s.id === "scanner");
-        const nodes = scannerStage ? (scannerStage.nodes || []) : [];
+        const stages = data.stages || [];
+        // The light recognizer (semantic_priority) is a triage-stage node, not a
+        // scanner-stage one, so include both stages here or its score never gets
+        // a dashboard column.
+        const triageStage = stages.find((s) => s.id === "triage");
+        const scannerStage = stages.find((s) => s.id === "scanner");
+        const nodes = [
+          ...(triageStage ? triageStage.nodes || [] : []),
+          ...(scannerStage ? scannerStage.nodes || [] : []),
+        ];
         knownScannerIds = new Set(nodes.filter((n) => !n.error).map((n) => n.id));
         scannerColumns = nodes
           .filter((n) => n.enabled && !n.error)
@@ -560,6 +601,7 @@ PAGE = """
             id: n.id,
             label: n.label || n.id,
             checker: n.checker || "",
+            threshold: typeof n.threshold === "number" ? n.threshold : null,
             enabled: true,
           }));
         renderTableHeads();
@@ -669,6 +711,11 @@ PAGE = """
       } finally {
         $("clearDedupBtn").disabled = false;
       }
+    });
+
+    $("exportXlsxBtn").addEventListener("click", () => {
+      // Server builds the .xlsx (all jobs, sorted by manual-check priority).
+      window.location.href = "/export.xlsx";
     });
 
     function renderParserStatus(s) {
@@ -903,7 +950,7 @@ PAGE = """
       const items = priorityItems;
       const rows = items.slice(0, priorityShown).map((item) => {
         return `
-          <tr>
+          <tr class="${rowRiskClass(item)}">
             <td>${reelLink(item.source || {})}</td>
             ${descCell(item)}
             <td>${escapeHtml(item.status || "")}</td>
@@ -949,7 +996,7 @@ PAGE = """
       const items = recentItems;
       const rows = items.slice(0, recentShown).map((item) => {
         return `
-          <tr>
+          <tr class="${rowRiskClass(item)}">
             <td>${formatTime(item.created_at)}</td>
             <td>${reelLink(item.source || {})}</td>
             ${descCell(item)}
@@ -1270,7 +1317,7 @@ ARCHITECTURE_PAGE = """
       inset: 0;
       width: 100%;
       height: 100%;
-      pointer-events: none;
+      pointer-events: auto;
       z-index: 0;
     }
     .flow {
@@ -1281,6 +1328,7 @@ ARCHITECTURE_PAGE = """
       grid-auto-columns: minmax(180px, 260px);
       align-items: start;
       gap: 72px;
+      transform-origin: 0 0;
     }
     .stage {
       display: grid;
@@ -1310,6 +1358,10 @@ ARCHITECTURE_PAGE = """
     .node-card.info { border-style: dashed; color: var(--muted); }
     .node-card.off { opacity: .55; }
     .node-card.err { border-color: var(--bad); }
+    .node-card.selected {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(255,107,58,.32), 0 16px 36px rgba(0,0,0,.28);
+    }
     .node-top { display: flex; align-items: center; gap: 12px; min-width: 0; }
     .node-icon {
       display: grid;
@@ -1357,10 +1409,45 @@ ARCHITECTURE_PAGE = """
       border: 2px solid var(--line);
       border-radius: 999px;
       background: var(--bg);
+      cursor: crosshair;
       transform: translateY(-50%);
     }
     .port.in { left: -9px; }
     .port.out { right: -9px; }
+    .edge-line {
+      fill: none;
+      stroke: var(--edge);
+      stroke-width: 2;
+      opacity: .74;
+      pointer-events: none;
+    }
+    .edge-hit {
+      fill: none;
+      stroke: transparent;
+      stroke-width: 16;
+      pointer-events: stroke;
+      cursor: pointer;
+    }
+    .edge-line.selected {
+      stroke: var(--accent);
+      opacity: 1;
+      stroke-width: 3;
+    }
+    .temp-edge {
+      fill: none;
+      stroke: var(--accent);
+      stroke-width: 2;
+      stroke-dasharray: 6 6;
+      pointer-events: none;
+    }
+    .selection-box {
+      position: absolute;
+      z-index: 10;
+      border: 1px solid var(--accent);
+      background: rgba(255,107,58,.16);
+      pointer-events: none;
+    }
+    .selection-box[hidden] { display: none; }
     .err-msg { color: var(--bad); font-size: 12px; overflow-wrap: anywhere; }
     .footer-status {
       position: fixed;
@@ -1398,12 +1485,18 @@ ARCHITECTURE_PAGE = """
   <main id="canvas" class="canvas">
     <svg id="edges" class="edges"></svg>
     <div id="flow" class="flow"><div class="status">Loading pipeline...</div></div>
+    <div id="selectionBox" class="selection-box" hidden></div>
   </main>
   <div id="archStatus" class="footer-status status"></div>
 
   <script>
     const $ = (id) => document.getElementById(id);
     let archData = null;
+    let zoom = 1;
+    let selectedNodes = new Set();
+    let selectedEdge = null;
+    let connecting = null;
+    let selection = null;
 
     function escapeHtml(value) {
       return String(value)
@@ -1437,25 +1530,47 @@ ARCHITECTURE_PAGE = """
       if (!res.ok) throw new Error(await res.text());
     }
 
+    async function connectEdge(fromId, toId) {
+      const res = await fetch("/architecture/edge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from_id: fromId, to_id: toId }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+    }
+
+    async function removeEdge(fromId, toId) {
+      const res = await fetch("/architecture/edge/remove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from_id: fromId, to_id: toId }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+    }
+
     async function loadArchitecture() {
       const res = await fetch("/architecture");
       if (!res.ok) throw new Error(await res.text());
       archData = await res.json();
       renderFlow();
+      applyZoom();
+      pruneSelection();
+      applySelection();
       requestAnimationFrame(drawEdges);
     }
 
     function nodeShell(node, inner, extra = "") {
-      return `<div class="node-card ${extra}" data-flow-node data-stage-id="${escapeHtml(node.stage_id || "")}">
-        <span class="port in"></span>
-        <span class="port out"></span>
+      const id = node.id || node.stage_id || "";
+      return `<div class="node-card ${extra}" data-flow-node data-node-id="${escapeHtml(id)}" data-node-kind="${escapeHtml(node.kind || "")}" data-removable="${node.removable ? "true" : "false"}" data-stage-id="${escapeHtml(node.stage_id || "")}">
+        <span class="port in" data-port="in" data-node-id="${escapeHtml(id)}"></span>
+        <span class="port out" data-port="out" data-node-id="${escapeHtml(id)}"></span>
         ${inner}
       </div>`;
     }
 
     function infoNode(stage) {
       return nodeShell(
-        { stage_id: stage.id },
+        { id: stage.id, stage_id: stage.id, kind: "info" },
         `<div class="node-top"><div class="node-icon">${stage.id === "parse" ? "IN" : "Q"}</div><div><div class="node-title">${escapeHtml(stage.label)}</div><div class="node-note">${escapeHtml(stage.note || "")}</div></div></div>`,
         "info"
       );
@@ -1464,7 +1579,7 @@ ARCHITECTURE_PAGE = """
     function pipelineNodeHtml(n, stageId) {
       if (n.error) {
         return nodeShell(
-          { stage_id: stageId },
+          { id: n.id, stage_id: stageId, kind: "pipeline" },
           `<div class="node-top"><div class="node-icon">!</div><div><div class="node-title">${escapeHtml(n.label)}</div><div class="badges"><span class="badge plugin">plugin</span><span class="badge">load error</span></div></div></div><div class="err-msg">${escapeHtml(n.error)}</div>`,
           "err"
         );
@@ -1488,7 +1603,7 @@ ARCHITECTURE_PAGE = """
         </div>
         <label class="ctl"><input type="checkbox" data-node-toggle="${escapeHtml(n.id)}" ${n.enabled ? "checked" : ""}> ${n.enabled ? "enabled" : "disabled"}</label>
         <div class="ctl">${threshold}${remove}</div>`;
-      return nodeShell({ stage_id: stageId }, inner, n.enabled ? "" : "off");
+      return nodeShell({ id: n.id, stage_id: stageId, kind: "pipeline", removable: n.removable }, inner, n.enabled ? "" : "off");
     }
 
     function platformNodeHtml(n, stageId) {
@@ -1501,7 +1616,7 @@ ARCHITECTURE_PAGE = """
           </div>
         </div>
         <div class="node-note">${escapeHtml(n.note || n.url || "")}</div>`;
-      return nodeShell({ stage_id: stageId }, inner, n.enabled ? "" : "off");
+      return nodeShell({ id: n.id, stage_id: stageId, kind: "platform" }, inner, n.enabled ? "" : "off");
     }
 
     function aggregateNodeHtml(n, stageId) {
@@ -1511,7 +1626,7 @@ ARCHITECTURE_PAGE = """
           <div><div class="node-title">Aggregator</div><div class="node-note">Flags scam when any enabled scanner reaches its threshold.</div></div>
         </div>
         <label class="ctl">default &gt;= % <input type="number" min="0" max="100" step="1" value="${Math.round((n.default_threshold ?? 0) * 100)}" data-default-threshold></label>`;
-      return nodeShell({ stage_id: stageId }, inner);
+      return nodeShell({ id: "aggregate", stage_id: stageId, kind: "aggregate" }, inner);
     }
 
     function investigateNodeHtml(n, stageId) {
@@ -1525,7 +1640,7 @@ ARCHITECTURE_PAGE = """
         <label class="ctl"><input type="checkbox" data-inv-toggle ${n.enabled ? "checked" : ""}> ${n.enabled ? "auto-scan on" : "auto-scan off"}</label>
         <label class="ctl">max reels <input type="number" min="1" step="1" value="${n.max_reels || ""}" data-inv-max></label>
         <div class="ctl">${row("Semantic", "semantic")}${row("OCR", "ocr")}${row("CLIP", "clip")}${row("Audio", "audio")}</div>`;
-      return nodeShell({ stage_id: stageId }, inner, n.enabled ? "" : "off");
+      return nodeShell({ id: "investigate", stage_id: stageId, kind: "investigate" }, inner, n.enabled ? "" : "off");
     }
 
     function stageHtml(stage) {
@@ -1548,30 +1663,145 @@ ARCHITECTURE_PAGE = """
       const svg = $("edges");
       const canvas = $("canvas").getBoundingClientRect();
       svg.innerHTML = "";
-      const stages = [...document.querySelectorAll("[data-stage]")];
       svg.setAttribute("viewBox", `0 0 ${canvas.width} ${canvas.height}`);
-      for (let i = 0; i < stages.length - 1; i += 1) {
-        const fromNodes = [...stages[i].querySelectorAll("[data-flow-node]")];
-        const toNodes = [...stages[i + 1].querySelectorAll("[data-flow-node]")];
-        for (const from of fromNodes) {
-          const a = from.getBoundingClientRect();
-          for (const to of toNodes) {
-            const b = to.getBoundingClientRect();
-            const x1 = a.right - canvas.left;
-            const y1 = a.top + a.height / 2 - canvas.top;
-            const x2 = b.left - canvas.left;
-            const y2 = b.top + b.height / 2 - canvas.top;
-            const dx = Math.max(44, (x2 - x1) / 2);
-            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-            path.setAttribute("d", `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`);
-            path.setAttribute("fill", "none");
-            path.setAttribute("stroke", "var(--edge)");
-            path.setAttribute("stroke-width", "2");
-            path.setAttribute("opacity", ".7");
-            svg.appendChild(path);
+      for (const edge of (archData && archData.edges ? archData.edges : [])) {
+        const from = nodeEl(edge.from);
+        const to = nodeEl(edge.to);
+        if (!from || !to) continue;
+        const d = edgePath(from, to);
+        const line = svgPath(d, "edge-line");
+        line.dataset.edgeId = edge.id;
+        if (selectedEdge && selectedEdge.id === edge.id) line.classList.add("selected");
+        const hit = svgPath(d, "edge-hit");
+        hit.dataset.edgeId = edge.id;
+        hit.dataset.from = edge.from;
+        hit.dataset.to = edge.to;
+        svg.appendChild(line);
+        svg.appendChild(hit);
+      }
+      if (connecting) drawTempEdge(connecting.x, connecting.y);
+    }
+
+    function nodeEl(id) {
+      return [...document.querySelectorAll("[data-node-id]")].find((el) => el.dataset.nodeId === id);
+    }
+
+    function edgePath(from, to) {
+      const canvas = $("canvas").getBoundingClientRect();
+      const a = from.getBoundingClientRect();
+      const b = to.getBoundingClientRect();
+      const x1 = a.right - canvas.left;
+      const y1 = a.top + a.height / 2 - canvas.top;
+      const x2 = b.left - canvas.left;
+      const y2 = b.top + b.height / 2 - canvas.top;
+      const dx = Math.max(44, Math.abs(x2 - x1) / 2);
+      return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+    }
+
+    function svgPath(d, cls) {
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", d);
+      path.setAttribute("class", cls);
+      return path;
+    }
+
+    function drawTempEdge(x2, y2) {
+      const from = nodeEl(connecting.from);
+      if (!from) return;
+      const canvas = $("canvas").getBoundingClientRect();
+      const a = from.getBoundingClientRect();
+      const x1 = a.right - canvas.left;
+      const y1 = a.top + a.height / 2 - canvas.top;
+      const dx = Math.max(44, Math.abs(x2 - x1) / 2);
+      const d = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+      $("edges").appendChild(svgPath(d, "temp-edge"));
+    }
+
+    function applyZoom() {
+      $("flow").style.transform = `scale(${zoom})`;
+      requestAnimationFrame(drawEdges);
+    }
+
+    function setZoom(next) {
+      zoom = Math.max(0.5, Math.min(1.6, next));
+      applyZoom();
+    }
+
+    function pruneSelection() {
+      selectedNodes = new Set([...selectedNodes].filter((id) => nodeEl(id)));
+      if (selectedEdge && !(archData.edges || []).some((e) => e.id === selectedEdge.id)) selectedEdge = null;
+    }
+
+    function applySelection() {
+      document.querySelectorAll("[data-flow-node]").forEach((node) => {
+        node.classList.toggle("selected", selectedNodes.has(node.dataset.nodeId));
+      });
+      document.querySelectorAll(".edge-line").forEach((edge) => {
+        edge.classList.toggle("selected", selectedEdge && selectedEdge.id === edge.dataset.edgeId);
+      });
+    }
+
+    function clearSelection() {
+      selectedNodes.clear();
+      selectedEdge = null;
+      applySelection();
+      requestAnimationFrame(drawEdges);
+    }
+
+    function selectNode(node, additive = false) {
+      if (!additive) {
+        selectedNodes.clear();
+        selectedEdge = null;
+      }
+      const id = node.dataset.nodeId;
+      if (additive && selectedNodes.has(id)) selectedNodes.delete(id);
+      else selectedNodes.add(id);
+      applySelection();
+    }
+
+    function selectEdge(edge) {
+      selectedNodes.clear();
+      selectedEdge = { id: edge.dataset.edgeId, from: edge.dataset.from, to: edge.dataset.to };
+      applySelection();
+      requestAnimationFrame(drawEdges);
+    }
+
+    function rectsIntersect(a, b) {
+      return a.left <= b.right && a.right >= b.left && a.top <= b.bottom && a.bottom >= b.top;
+    }
+
+    async function deleteSelected() {
+      if (selectedEdge) {
+        await removeEdge(selectedEdge.from, selectedEdge.to);
+        selectedEdge = null;
+        await loadArchitecture();
+        archMsg("Path removed.");
+        return;
+      }
+      const ids = [...selectedNodes];
+      if (!ids.length) return;
+      const removable = ids.filter((id) => {
+        const node = nodeEl(id);
+        return node && node.dataset.nodeKind === "pipeline" && node.dataset.removable === "true";
+      });
+      if (removable.length && !confirm(`Remove ${removable.length} plugin node(s)? Plugin files stay on disk.`)) return;
+      for (const id of ids) {
+        const node = nodeEl(id);
+        if (!node) continue;
+        if (node.dataset.nodeKind === "pipeline") {
+          if (node.dataset.removable === "true") {
+            const res = await fetch(`/architecture/node/${encodeURIComponent(id)}`, { method: "DELETE" });
+            if (!res.ok) throw new Error(await res.text());
+          } else {
+            await postNode(id, { enabled: false });
           }
+        } else if (node.dataset.nodeKind === "investigate") {
+          await postAutoScan({ enabled: false });
         }
       }
+      selectedNodes.clear();
+      await loadArchitecture();
+      archMsg("Selected node(s) removed from the active flow.");
     }
 
     async function deleteNode(id) {
@@ -1629,15 +1859,135 @@ ARCHITECTURE_PAGE = """
       }
     });
 
+    document.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return;
+      const port = e.target.closest(".port");
+      if (port && port.dataset.port === "out") {
+        e.preventDefault();
+        const canvas = $("canvas").getBoundingClientRect();
+        connecting = {
+          from: port.dataset.nodeId,
+          x: e.clientX - canvas.left,
+          y: e.clientY - canvas.top,
+        };
+        requestAnimationFrame(drawEdges);
+        return;
+      }
+      if (e.target.closest("[data-flow-node], input, button, a, label")) return;
+      const canvas = $("canvas").getBoundingClientRect();
+      selection = {
+        startX: e.clientX,
+        startY: e.clientY,
+        canvasLeft: canvas.left,
+        canvasTop: canvas.top,
+        moved: false,
+      };
+      $("selectionBox").hidden = false;
+      $("selectionBox").style.left = `${e.clientX - canvas.left}px`;
+      $("selectionBox").style.top = `${e.clientY - canvas.top}px`;
+      $("selectionBox").style.width = "0px";
+      $("selectionBox").style.height = "0px";
+    });
+
+    document.addEventListener("mousemove", (e) => {
+      if (connecting) {
+        const canvas = $("canvas").getBoundingClientRect();
+        connecting.x = e.clientX - canvas.left;
+        connecting.y = e.clientY - canvas.top;
+        requestAnimationFrame(drawEdges);
+        return;
+      }
+      if (!selection) return;
+      const x1 = Math.min(selection.startX, e.clientX);
+      const y1 = Math.min(selection.startY, e.clientY);
+      const x2 = Math.max(selection.startX, e.clientX);
+      const y2 = Math.max(selection.startY, e.clientY);
+      selection.moved = selection.moved || Math.abs(e.clientX - selection.startX) > 4 || Math.abs(e.clientY - selection.startY) > 4;
+      const box = $("selectionBox");
+      box.style.left = `${x1 - selection.canvasLeft}px`;
+      box.style.top = `${y1 - selection.canvasTop}px`;
+      box.style.width = `${x2 - x1}px`;
+      box.style.height = `${y2 - y1}px`;
+      const rect = { left: x1, top: y1, right: x2, bottom: y2 };
+      selectedEdge = null;
+      selectedNodes = new Set(
+        [...document.querySelectorAll("[data-flow-node]")]
+          .filter((node) => rectsIntersect(rect, node.getBoundingClientRect()))
+          .map((node) => node.dataset.nodeId)
+      );
+      applySelection();
+    });
+
+    document.addEventListener("mouseup", async (e) => {
+      if (connecting) {
+        const target = e.target.closest(".port.in");
+        const from = connecting.from;
+        connecting = null;
+        try {
+          if (target && target.dataset.nodeId && target.dataset.nodeId !== from) {
+            await connectEdge(from, target.dataset.nodeId);
+            await loadArchitecture();
+            archMsg("Path connected.");
+          } else {
+            requestAnimationFrame(drawEdges);
+          }
+        } catch (err) {
+          archMsg(err.message || String(err), true);
+          requestAnimationFrame(drawEdges);
+        }
+      }
+      if (selection) {
+        $("selectionBox").hidden = true;
+        if (!selection.moved) clearSelection();
+        selection = null;
+      }
+    });
+
     document.addEventListener("click", async (e) => {
       const d = e.target && e.target.dataset;
-      if (!d || d.nodeDel === undefined) return;
-      try {
-        await deleteNode(d.nodeDel);
-        await loadArchitecture();
-        archMsg(`Removed ${d.nodeDel}.`);
-      } catch (err) {
-        archMsg(err.message || String(err), true);
+      if (d && d.edgeId) {
+        selectEdge(e.target);
+        return;
+      }
+      if (d && d.nodeDel !== undefined) {
+        try {
+          await deleteNode(d.nodeDel);
+          await loadArchitecture();
+          archMsg(`Removed ${d.nodeDel}.`);
+        } catch (err) {
+          archMsg(err.message || String(err), true);
+        }
+        return;
+      }
+      if (e.target.closest("input, button, a, label, .port")) return;
+      const node = e.target.closest("[data-flow-node]");
+      if (node) {
+        selectNode(node, e.ctrlKey || e.metaKey || e.shiftKey);
+      }
+    });
+
+    document.addEventListener("keydown", async (e) => {
+      const tag = document.activeElement && document.activeElement.tagName;
+      const editing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+      if ((e.key === "Delete" || e.key === "Backspace") && !editing) {
+        e.preventDefault();
+        try {
+          await deleteSelected();
+        } catch (err) {
+          archMsg(err.message || String(err), true);
+        }
+        return;
+      }
+      if (!e.ctrlKey && !e.metaKey) return;
+      if (e.key === "-" || e.code === "Minus") {
+        e.preventDefault();
+        setZoom(zoom - 0.1);
+      } else if (e.key === "=" || e.key === "+" || e.code === "Equal") {
+        e.preventDefault();
+        setZoom(zoom + 0.1);
+      } else if (e.key === "0") {
+        e.preventDefault();
+        setZoom(1);
       }
     });
 

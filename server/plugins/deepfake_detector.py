@@ -137,25 +137,60 @@ class DeepfakeDetector:
         return float(np.mean(probs)), len(images)
 
     @staticmethod
-    def _sample_frames(path: Path, cv2):
+    def _even_indices(total: int, count: int) -> list[int]:
+        count = min(count, total)
+        if count <= 1:
+            return [total // 2]
+        return [round(i * (total - 1) / (count - 1)) for i in range(count)]
+
+    @classmethod
+    def _sample_frames(cls, path: Path, cv2):
         capture = cv2.VideoCapture(str(path))
         if not capture.isOpened():
             return []
         total = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        # MediaRecorder .webm clips (from the parser) carry no frame count in
+        # their header, so CAP_PROP_FRAME_COUNT is 0 and frame seeking is
+        # unreliable. Fall back to a streaming sampler that needs neither.
         if total <= 0:
             capture.release()
-            return []
-        count = min(NUM_FRAMES, total)
-        if count <= 1:
-            indices = [total // 2]
-        else:
-            indices = [round(i * (total - 1) / (count - 1)) for i in range(count)]
+            return cls._sample_frames_streaming(path, cv2)
         frames = []
-        for index in indices:
+        for index in cls._even_indices(total, NUM_FRAMES):
             capture.set(cv2.CAP_PROP_POS_FRAMES, index)
             ok, frame = capture.read()
             if ok and frame is not None:
                 frames.append(frame)
+        capture.release()
+        return frames
+
+    @classmethod
+    def _sample_frames_streaming(cls, path: Path, cv2):
+        """Sample evenly spaced frames without a header frame count or seeking.
+
+        Pass 1 counts decodable frames with grab() (no decode). Pass 2 streams
+        again and only decodes the target indices, so memory stays at NUM_FRAMES.
+        """
+        counter = cv2.VideoCapture(str(path))
+        if not counter.isOpened():
+            return []
+        total = 0
+        while counter.grab():
+            total += 1
+        counter.release()
+        if total <= 0:
+            return []
+
+        targets = set(cls._even_indices(total, NUM_FRAMES))
+        capture = cv2.VideoCapture(str(path))
+        frames = []
+        index = 0
+        while capture.grab():
+            if index in targets:
+                ok, frame = capture.retrieve()
+                if ok and frame is not None:
+                    frames.append(frame)
+            index += 1
         capture.release()
         return frames
 

@@ -18,6 +18,11 @@ class AggregateUpdate(BaseModel):
     default_threshold: float
 
 
+class EdgeUpdate(BaseModel):
+    from_id: str
+    to_id: str
+
+
 @router.get("")
 async def get_architecture(components=Depends(get_components)) -> dict:
     return components.architecture.graph(components.auto_scan)
@@ -45,6 +50,32 @@ async def delete_node(node_id: str, components=Depends(get_components)) -> dict:
 async def update_aggregate(body: AggregateUpdate, components=Depends(get_components)) -> dict:
     threshold = components.architecture.set_default_threshold(body.default_threshold)
     return {"default_threshold": threshold}
+
+
+@router.post("/edge")
+async def connect_edge(body: EdgeUpdate, components=Depends(get_components)) -> dict:
+    if body.to_id == "investigate":
+        components.auto_scan.enabled = True
+        return components.architecture.graph(components.auto_scan)
+    try:
+        components.architecture.connect_edge(body.from_id, body.to_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"unknown node: {body.to_id}") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return components.architecture.graph(components.auto_scan)
+
+
+@router.post("/edge/remove")
+async def remove_edge(body: EdgeUpdate, components=Depends(get_components)) -> dict:
+    if body.to_id == "investigate":
+        components.auto_scan.enabled = False
+        return components.architecture.graph(components.auto_scan)
+    try:
+        components.architecture.disconnect_edge(body.from_id, body.to_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"unknown node: {body.to_id}") from exc
+    return components.architecture.graph(components.auto_scan)
 
 
 @router.post("/reload")

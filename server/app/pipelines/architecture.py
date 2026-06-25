@@ -38,6 +38,11 @@ class PipelineArchitecture:
         self._known: dict[str, object] = {p.name: p for p in registry.all()}
         self._builtin_names: set[str] = set(self._known)
         self._plugin_loads: list[PluginLoad] = []
+        # Optional visual/runtime edge source for a pipeline node. The worker
+        # still reads enabled registry nodes; edge removal enables/disables
+        # nodes and this keeps reconnects visible on the architecture canvas.
+        self._edge_sources: dict[str, str] = {}
+        self._disabled_edges: set[tuple[str, str]] = set()
 
     @staticmethod
     def _resolve_dir(plugins_dir: str) -> Path:
@@ -54,6 +59,7 @@ class PipelineArchitecture:
             if load.pipeline is not None:
                 self.registry.remove(load.pipeline.name)
                 self._known.pop(load.pipeline.name, None)
+                self._edge_sources.pop(load.pipeline.name, None)
         self._plugin_loads = discover_plugins(self.plugins_dir)
         for load in self._plugin_loads:
             if load.pipeline is not None:
@@ -137,8 +143,69 @@ class PipelineArchitecture:
         ]
         return {
             "stages": stages,
+            "edges": self._edges(
+                triage_nodes,
+                scanner_nodes,
+                investigator_enabled=bool(investigate_node.get("enabled", True)),
+            ),
             "default_threshold": aggregator.DEFAULT_THRESHOLD,
             "plugins_dir": str(self.plugins_dir),
+        }
+
+    def _edges(
+        self,
+        triage_nodes: list[dict],
+        scanner_nodes: list[dict],
+        investigator_enabled: bool = True,
+    ) -> list[dict]:
+        def active(nodes: list[dict]) -> list[dict]:
+            return [n for n in nodes if n.get("enabled") and not n.get("error")]
+
+        triage = active(triage_nodes)
+        scanners = active(scanner_nodes)
+        active_ids = {
+            "instagram",
+            "tiktok",
+            "parse",
+            "priority",
+            "aggregate",
+            "investigate",
+            *(n["id"] for n in triage),
+            *(n["id"] for n in scanners),
+        }
+        edges: list[dict] = []
+
+        self._add_edge(edges, "instagram", "parse")
+        self._add_edge(edges, "tiktok", "parse")
+
+        if triage:
+            for node in triage:
+                self._add_edge(edges, "parse", node["id"])
+                self._add_edge(edges, node["id"], "priority")
+        else:
+            self._add_edge(edges, "parse", "priority")
+
+        for node in scanners:
+            source = self._edge_sources.get(node["id"], "priority")
+            if source not in active_ids:
+                source = "priority"
+            self._add_edge(edges, source, node["id"])
+            self._add_edge(edges, node["id"], "aggregate")
+
+        if investigator_enabled:
+            self._add_edge(edges, "aggregate", "investigate")
+        return edges
+
+    def _add_edge(self, edges: list[dict], from_id: str, to_id: str) -> None:
+        if (from_id, to_id) not in self._disabled_edges:
+            edges.append(self._edge(from_id, to_id))
+
+    @staticmethod
+    def _edge(from_id: str, to_id: str) -> dict:
+        return {
+            "id": f"{from_id}->{to_id}",
+            "from": from_id,
+            "to": to_id,
         }
 
     # ---- edits ---------------------------------------------------------
@@ -155,11 +222,52 @@ class PipelineArchitecture:
             aggregator.SCANNER_THRESHOLDS[node_id] = max(0.0, min(1.0, float(threshold)))
         return self._node(pipeline)
 
+    def connect_edge(self, from_id: str, to_id: str) -> None:
+        if from_id == to_id:
+            raise ValueError("cannot connect a node to itself")
+        self._disabled_edges.discard((from_id, to_id))
+        if to_id in self._known:
+            self._edge_sources[to_id] = from_id
+            self.set_node(to_id, enabled=True)
+            return
+        if from_id in self._known and to_id == "aggregate":
+            self.set_node(from_id, enabled=True)
+            return
+        if from_id in self._all_node_ids() and to_id in self._all_node_ids():
+            return
+        raise KeyError(to_id)
+
+    def disconnect_edge(self, from_id: str, to_id: str) -> None:
+        if to_id in self._known:
+            if self._edge_sources.get(to_id) == from_id:
+                self._edge_sources.pop(to_id, None)
+            self.set_node(to_id, enabled=False)
+            return
+        if from_id in self._known:
+            self.set_node(from_id, enabled=False)
+            return
+        if from_id in self._all_node_ids() and to_id in self._all_node_ids():
+            self._disabled_edges.add((from_id, to_id))
+            return
+        raise KeyError(to_id)
+
+    def _all_node_ids(self) -> set[str]:
+        return {
+            "instagram",
+            "tiktok",
+            "parse",
+            "priority",
+            "aggregate",
+            "investigate",
+            *self._known.keys(),
+        }
+
     def remove_node(self, node_id: str) -> None:
         if node_id not in self._plugin_names():
             raise ValueError("only plugin checkers can be removed; disable built-ins instead")
         self.registry.remove(node_id)
         self._known.pop(node_id, None)
+        self._edge_sources.pop(node_id, None)
         aggregator.SCANNER_THRESHOLDS.pop(node_id, None)
         self._plugin_loads = [
             load for load in self._plugin_loads

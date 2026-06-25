@@ -1,0 +1,4 @@
+# source: C:\Users\bogda\github\AFM-Hack\server\buffer\incoming\03516cc6eae84084ad62d8b8209cb515\instagram_CwsjNLEsN-X.webm
+# frames_ocrd: 1
+
+1win
